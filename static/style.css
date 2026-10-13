@@ -14,6 +14,7 @@
   --white: #ffffff;
   --green: #2e7d32;       /* small accent: success and "selected" */
   --green-light: #e8f5e9;
+  --focus-blue: #1565c0;  /* package selected ring and focus ring */
   --amber: #8a5300;       /* warning text (dark enough to read) */
   --amber-light: #fff4e0;
   --red: #b3261e;
@@ -220,10 +221,15 @@ fieldset {
 }
 
 /* Selected package: green border and a checkmark */
+/* Selected package: green border, plus a blue ring just outside it.
+   The blue ring is a box-shadow, so it stays visible even when focus
+   moves somewhere else (for example, after Confirm Selection). */
 .package-option input:checked + .package-content {
   border-color: var(--green);
   background: var(--white);
-  box-shadow: 0 0 0 1px var(--green);
+  box-shadow:
+    0 0 0 1px var(--green),
+    0 0 0 4px var(--focus-blue);
 }
 
 .package-option input:checked + .package-content::after {
@@ -234,10 +240,14 @@ fieldset {
   color: var(--green);
 }
 
-/* Since the radio is invisible, show its focus ring on the card instead */
-.package-option input:focus-visible + .package-content {
-  outline: 3px solid var(--green);
-  outline-offset: 2px;
+/* The radio is invisible, so show its focus ring around the whole card instead.
+   :focus-within matches the label when the radio inside it has focus.
+   It sits a few pixels outside the selected card's blue ring, with a small
+   gap, so you can still tell which card has keyboard focus. */
+.package-option:focus-within {
+  outline: 3px solid var(--focus-blue);
+  outline-offset: 6px;
+  border-radius: var(--radius);
 }
 
 .package-summary {
