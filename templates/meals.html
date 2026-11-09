@@ -1,0 +1,115 @@
+{#
+  Meal page for Issue #3: Choose Daily Meals.
+  Shows one group of meal choices for each camp day the parent picked on the
+  package page. app.py sends the package, days, and menu, and checks every
+  choice again when the form is submitted.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choose Daily Meals | Tucker Road Ice Rink Summer Camp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <!-- Lets keyboard users jump straight past the header -->
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">Tucker Road Ice Rink</p>
+      <h1>Summer Camp Lunch Registration</h1>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <!-- Shown right after the package page sends the parent here -->
+    {% if package_message %}
+      <div class="alert alert-success" role="status">{{ package_message }}</div>
+    {% endif %}
+
+    <!-- A reminder of what was chosen on the package page -->
+    <section class="card" aria-labelledby="summary-heading">
+      <h2 id="summary-heading">Your package and days</h2>
+      <p class="package-summary">{{ package.name }} — {{ days|length }} of {{ package.lunches }} lunches selected</p>
+      <p class="summary-days">Camp days: {{ days|join(", ") }}</p>
+    </section>
+
+    <form id="meal-form" method="post" action="{{ url_for('meals') }}" novalidate>
+      <!-- STEP 3: One meal for each selected day -->
+      <section class="card" aria-labelledby="step-3-heading">
+        <h2 id="step-3-heading"><span class="step-number">3</span> Choose a meal for each day</h2>
+        <p class="hint">Pick one meal for every camp day. Each meal comes with fries and a drink.</p>
+
+        {% for row in day_rows %}
+          <!-- One radio-button group per day. Radio buttons that share a
+               "name" only allow one choice, so each day gets one meal. -->
+          <fieldset
+            class="meal-day{% if row.has_problem %} meal-day-invalid{% endif %}"
+            data-day="{{ row.day }}"
+            aria-describedby="{{ row.field }}-error"
+          >
+            <legend class="meal-day-title">{{ row.day }}</legend>
+
+            <!-- Shown when this day still needs a meal -->
+            <p id="{{ row.field }}-error" class="meal-day-error" {% if not row.has_problem %}hidden{% endif %}>
+              Please choose a meal for {{ row.day }}.
+            </p>
+
+            <div class="meal-options">
+              {% for meal in meals %}
+                <label class="meal-option">
+                  <!-- Only the meal's ID is sent. The server looks up its name and price. -->
+                  <input
+                    type="radio"
+                    name="{{ row.field }}"
+                    value="{{ meal.id }}"
+                    {% if row.selected == meal.id %}checked{% endif %}
+                  >
+                  <span class="meal-name">{{ meal.name }}</span>
+                  <span class="meal-price">{{ meal.price_cents|price }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+        {% endfor %}
+
+        <!-- Counter, e.g. "2 of 4 days have a meal chosen". aria-live reads changes aloud. -->
+        <p id="meal-counter" class="lunch-counter" aria-live="polite">
+          {{ chosen_count }} of {{ days|length }} days have a meal chosen
+        </p>
+      </section>
+
+      <!-- Result message near the save button. Flask fills it in after
+           submitting; meals.js also uses it for quick checks first.
+           tabindex="-1" lets the script move focus here so screen readers read it. -->
+      <div
+        id="form-message"
+        class="alert {% if error %}alert-error{% elif success %}alert-success{% endif %}"
+        role="alert"
+        tabindex="-1"
+        {% if not error and not success %}hidden{% endif %}
+      >{{ error or success or "" }}</div>
+
+      <div class="button-row">
+        <!-- Save comes first, so pressing Enter saves -->
+        <button type="submit" id="save-button" class="button">Save Meal Choices</button>
+        <!-- Also a submit button, so meals chosen so far are kept when going back -->
+        <button type="submit" id="back-button" class="button button-secondary" name="action" value="back">
+          Back to Package &amp; Days
+        </button>
+      </div>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='meals.js') }}"></script>
+</body>
+</html>
