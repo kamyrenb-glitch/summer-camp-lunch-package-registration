@@ -30,6 +30,8 @@
       <div class="alert alert-success" role="status">{{ package_message }}</div>
     {% endif %}
 
+    {% include "_camper_bar.html" %}
+
     <!-- A reminder of what was chosen on the package page -->
     <section class="card" aria-labelledby="summary-heading">
       <h2 id="summary-heading">Your package and days</h2>
@@ -37,7 +39,7 @@
       <p class="summary-days">Camp days: {{ days|join(", ") }}</p>
     </section>
 
-    <form id="meal-form" method="post" action="{{ url_for('meals') }}" novalidate>
+    <form id="meal-form" method="post" action="{{ url_for('main.meals') }}" novalidate>
       <!-- STEP 3: One meal for each selected day -->
       <section class="card" aria-labelledby="step-3-heading">
         <h2 id="step-3-heading"><span class="step-number">3</span> Choose a meal for each day</h2>

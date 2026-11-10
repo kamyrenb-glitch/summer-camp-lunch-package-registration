@@ -2,3 +2,6 @@ venv/
 __pycache__/
 *.pyc
 .env
+# Local-only files: the development SQLite database and the dev secret key
+instance/
+*.db
