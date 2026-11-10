@@ -1,5 +1,5 @@
 {#
-  Main page for Issue #2: Select a Lunch Package.
+  Package page for Issue #2: Select a Lunch Package.
   Flask fills in the double-curly-brace and curly-brace-percent parts
   (this is called Jinja) using the PACKAGES and CAMP_DAYS lists from app.py.
   This is a Jinja comment, so it never gets sent to the browser.
@@ -24,7 +24,14 @@
   </header>
 
   <main id="main" class="container">
-    <form id="package-form" method="post" action="{{ url_for('index') }}" novalidate>
+    <!-- Shown right after registering or editing the camper's information -->
+    {% if notice %}
+      <div class="alert alert-success" role="status">{{ notice }}</div>
+    {% endif %}
+
+    {% include "_camper_bar.html" %}
+
+    <form id="package-form" method="post" action="{{ url_for('main.index') }}" novalidate>
 
       <!-- STEP 1: Choose one package. Radio buttons only allow one choice. -->
       <section class="card" aria-labelledby="step-1-heading">

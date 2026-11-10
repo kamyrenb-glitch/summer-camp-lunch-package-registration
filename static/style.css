@@ -1,5 +1,5 @@
 /*
-  style.css - Ice rink theme for the lunch package and meal pages.
+  style.css - Ice rink theme for the registration, lunch package, and meal pages.
 
   Colors are stored as variables at the top so the whole theme
   can be changed in one place.
@@ -130,7 +130,8 @@ main {
   margin-bottom: 20px;
 }
 
-.card h2 {
+.card h2,
+.card h3 {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -353,10 +354,19 @@ fieldset {
   color: var(--green);
 }
 
+.alert-info {
+  background: var(--white);
+  border-color: var(--navy);
+  color: var(--navy);
+}
+
 /* ---------- Button ---------- */
 
 .button {
   display: inline-block;
+  text-align: center;
+  text-decoration: none; /* for links styled as buttons */
+  font-family: inherit;
   padding: 12px 28px;
   border: 0;
   border-radius: 8px;
@@ -387,6 +397,130 @@ fieldset {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+/* ---------- Registration page ---------- */
+
+.page-intro {
+  margin-bottom: 20px;
+}
+
+.page-intro h2 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 1.4rem;
+}
+
+.page-intro p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+/* Two fields side by side (camper first and last name) */
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.field-hint {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.field-error {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--red);
+}
+
+.field input {
+  width: 100%;
+  min-height: 48px; /* comfortable tap target on phones */
+  padding: 10px 12px;
+  border: 2px solid var(--ice-dark);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text);
+  font: inherit;
+}
+
+.field input:hover {
+  border-color: var(--navy);
+}
+
+/* A field with an error gets a red border and a red bar on its left */
+.field-invalid {
+  padding-left: 12px;
+  border-left: 4px solid var(--red);
+}
+
+.field-invalid input {
+  border-color: var(--red);
+}
+
+/* ---------- "Ordering for" bar (package and meal pages) ---------- */
+
+.camper-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  padding: 14px 20px;
+  background: var(--white);
+  border: 1px solid var(--ice-mid);
+  border-left: 5px solid var(--navy);
+  border-radius: var(--radius);
+}
+
+.camper-bar-name {
+  margin: 0;
+  color: var(--navy);
+}
+
+.camper-bar-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.camper-bar-name strong {
+  font-size: 1.15rem;
+}
+
+/* A link that reads clearly as an action */
+.link-button {
+  display: inline-block;
+  padding: 8px 4px;
+  color: var(--focus-blue);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link-button:hover {
+  color: var(--navy);
 }
 
 /* ---------- Meal page ---------- */
@@ -499,6 +633,10 @@ fieldset {
   }
 
   .meal-options {
+    grid-template-columns: 1fr;
+  }
+
+  .field-row {
     grid-template-columns: 1fr;
   }
 

@@ -6,6 +6,8 @@
   2. Before saving, checks that every day has a meal and points out any
      day that is missing one.
   3. Shows the result message near the save button and moves focus to it.
+  4. Keeps unsaved meal choices when the parent clicks
+     "Edit camper & contact information".
 
   app.py checks every choice again on the server, so this file is about giving
   the parent quick, friendly feedback while they click.
@@ -94,6 +96,21 @@ document.addEventListener("DOMContentLoaded", function () {
       event.preventDefault();
       showFormMessage("Please choose a meal for " + joinDays(missingDays) + ".", "error");
     }
+  });
+
+  // "Edit camper & contact information" is a normal link, but first we send
+  // the meals chosen so far to the server so they aren't lost. Without
+  // JavaScript the link still works; only unsaved choices would be lost.
+  const editCamperLink = document.getElementById("edit-camper-link");
+  editCamperLink.addEventListener("click", function (event) {
+    event.preventDefault();
+    const action = document.createElement("input");
+    action.type = "hidden";
+    action.name = "action";
+    action.value = "edit-camper";
+    form.appendChild(action);
+    // form.submit() skips the "every day needs a meal" check on purpose.
+    form.submit();
   });
 
   // Run once on page load so the counter matches any saved choices.

@@ -6,34 +6,19 @@ Run them from the project folder with:
 
 Flask's test client acts like a browser: it sends requests to the app and
 remembers the session cookie between requests, without starting a server.
+Each test registers a camper first, because these pages require one.
 """
 
-import re
 import unittest
 
-from app import app
+from base import AppTestCase, checked_values, form_message
 
 
-def checked_values(html, name):
-    """Return the values of the checked inputs with this name in the HTML."""
-    pattern = r'<input\s[^>]*name="' + re.escape(name) + r'"[^>]*>'
-    values = []
-    for tag in re.findall(pattern, html):
-        if re.search(r"\schecked\b", tag):
-            values.append(re.search(r'value="([^"]*)"', tag).group(1))
-    return values
-
-
-def form_message(html):
-    """Return the text inside the result banner near the button."""
-    match = re.search(r'id="form-message".*?>(.*?)</div>', html, re.S)
-    return match.group(1).strip()
-
-
-class LunchAppTestCase(unittest.TestCase):
+class PackageAndMealTestCase(AppTestCase):
     def setUp(self):
-        app.config["TESTING"] = True
-        self.client = app.test_client()
+        super().setUp()
+        self.register()
+        self.camper = self.camper_id()
 
     # ----- Helpers -----
 
@@ -41,14 +26,15 @@ class LunchAppTestCase(unittest.TestCase):
         """Submit the package page, the way a parent pressing Confirm Selection would."""
         return self.client.post("/", data={"package": package, "days": list(days)})
 
-    def saved_order(self):
-        with self.client.session_transaction() as session:
-            return session.get("order")
-
-    def set_order(self, order):
-        """Put an order straight into the session (to test bad or changed data)."""
-        with self.client.session_transaction() as session:
-            session["order"] = order
+    def order(self, package_id, days, meals=None):
+        """Build the order we expect to find in the session."""
+        return {
+            "status": "in_progress",
+            "camper_id": self.camper,
+            "package_id": package_id,
+            "days": days,
+            "meals": meals or {},
+        }
 
     # ----- Issue #2: package page -----
 
@@ -61,10 +47,7 @@ class LunchAppTestCase(unittest.TestCase):
         response = self.choose_package("6-day", ["Day 2", "Day 4"])
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.headers["Location"].endswith("/meals"))
-        self.assertEqual(
-            self.saved_order(),
-            {"status": "in_progress", "package_id": "6-day", "days": ["Day 2", "Day 4"], "meals": {}},
-        )
+        self.assertEqual(self.saved_order(), self.order("6-day", ["Day 2", "Day 4"]))
 
         html = self.client.get("/meals").get_data(as_text=True)
         self.assertIn("Lunch package selection confirmed: 6-Day Package with 2 camp days selected.", html)
@@ -130,15 +113,10 @@ class LunchAppTestCase(unittest.TestCase):
 
         self.assertEqual(
             self.saved_order(),
-            {
-                "status": "in_progress",
-                "package_id": "4-day",
-                "days": ["Day 1", "Day 3"],
-                "meals": {
-                    "Day 1": {"meal_id": "pepperoni-pizza", "price_cents": 1200},
-                    "Day 3": {"meal_id": "chicken-tenders", "price_cents": 1100},
-                },
-            },
+            self.order("4-day", ["Day 1", "Day 3"], {
+                "Day 1": {"meal_id": "pepperoni-pizza", "price_cents": 1200},
+                "Day 3": {"meal_id": "chicken-tenders", "price_cents": 1100},
+            }),
         )
 
         html = self.client.get("/meals").get_data(as_text=True)
@@ -202,16 +180,17 @@ class LunchAppTestCase(unittest.TestCase):
                 "price_cents": "1",
                 "meal_name": "Free Lunch",
                 "package": "12-day",
+                "camper_id": "999",
             },
         )
         order = self.saved_order()
         self.assertEqual(order["meals"], {"Day 1": {"meal_id": "pepperoni-pizza", "price_cents": 1200}})
         self.assertEqual(order["package_id"], "4-day")
+        self.assertEqual(order["camper_id"], self.camper)
 
     def test_order_over_package_limit_is_rejected(self):
         # Pretend the saved order somehow has more days than the package allows.
-        self.set_order({"status": "in_progress", "package_id": "4-day",
-                        "days": [f"Day {n}" for n in range(1, 7)], "meals": {}})
+        self.set_order(self.order("4-day", [f"Day {n}" for n in range(1, 7)]))
 
         response = self.client.get("/meals")
         self.assertEqual(response.status_code, 302)
@@ -225,10 +204,19 @@ class LunchAppTestCase(unittest.TestCase):
         self.assertIn("Please unselect 2 days", form_message(html))
 
     def test_tampered_prices_in_session_are_replaced_with_menu_prices(self):
-        self.set_order({"status": "in_progress", "package_id": "4-day", "days": ["Day 1"],
-                        "meals": {"Day 1": {"meal_id": "cheese-pizza", "price_cents": 1}}})
+        self.set_order(self.order("4-day", ["Day 1"], {"Day 1": {"meal_id": "cheese-pizza", "price_cents": 1}}))
         self.client.post("/meals", data={"action": "back"})
         self.assertEqual(self.saved_order()["meals"]["Day 1"]["price_cents"], 1100)
+
+    def test_order_for_a_different_camper_is_ignored(self):
+        other = self.order("4-day", ["Day 1"])
+        other["camper_id"] = self.camper + 1
+        self.set_order(other)
+
+        html = self.client.get("/").get_data(as_text=True)
+        self.assertEqual(checked_values(html, "package"), [])
+        self.assertEqual(checked_values(html, "days"), [])
+        self.assertEqual(self.client.get("/meals").status_code, 302)
 
     # ----- Going back without losing anything -----
 
@@ -257,10 +245,10 @@ class LunchAppTestCase(unittest.TestCase):
 
         # Go back, swap Day 2 for Day 8, and switch packages.
         self.choose_package("6-day", ["Day 1", "Day 8"])
-        order = self.saved_order()
-        self.assertEqual(order["package_id"], "6-day")
-        self.assertEqual(order["days"], ["Day 1", "Day 8"])
-        self.assertEqual(order["meals"], {"Day 1": {"meal_id": "cheese-pizza", "price_cents": 1100}})
+        self.assertEqual(
+            self.saved_order(),
+            self.order("6-day", ["Day 1", "Day 8"], {"Day 1": {"meal_id": "cheese-pizza", "price_cents": 1100}}),
+        )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+{#
+  Shows who the lunches are for, with a way to edit the registration.
+  Used by index.html and meals.html with {% include "_camper_bar.html" %}.
+  On the meal page, meals.js makes the edit link save the meals chosen so far
+  before leaving.
+#}
+<section class="camper-bar" aria-labelledby="camper-bar-label">
+  <p class="camper-bar-name">
+    <span id="camper-bar-label" class="camper-bar-label">Ordering for</span>
+    <strong>{{ camper.full_name }}</strong>
+  </p>
+  <a id="edit-camper-link" class="link-button" href="{{ url_for('main.register') }}">
+    Edit camper &amp; contact information
+  </a>
+</section>
