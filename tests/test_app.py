@@ -101,6 +101,16 @@ class PackageAndMealTestCase(AppTestCase):
         self.assertEqual(html.count("$11<"), 2 * 2)
         self.assertEqual(html.count("$12<"), 2)
 
+    def test_meal_page_summary_shows_number_of_lunches(self):
+        self.choose_package("6-day", [f"Day {n}" for n in range(1, 7)])
+        html = self.client.get("/meals").get_data(as_text=True)
+        self.assertIn('<p class="package-summary">6-Day Package — 6 lunches selected</p>', html)
+        self.assertNotIn("6 of 6", html)
+
+        self.choose_package("4-day", ["Day 2"])
+        html = self.client.get("/meals").get_data(as_text=True)
+        self.assertIn('<p class="package-summary">4-Day Package — 1 lunch selected</p>', html)
+
     # ----- Issue #3: saving meals -----
 
     def test_valid_meals_are_saved_with_ids_and_prices_in_cents(self):

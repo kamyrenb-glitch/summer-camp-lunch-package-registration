@@ -35,7 +35,7 @@
     <!-- A reminder of what was chosen on the package page -->
     <section class="card" aria-labelledby="summary-heading">
       <h2 id="summary-heading">Your package and days</h2>
-      <p class="package-summary">{{ package.name }} — {{ days|length }} of {{ package.lunches }} lunches selected</p>
+      <p class="package-summary">{{ package.name }} — {{ days|length }} {{ "lunch" if days|length == 1 else "lunches" }} selected</p>
       <p class="summary-days">Camp days: {{ days|join(", ") }}</p>
     </section>
 
