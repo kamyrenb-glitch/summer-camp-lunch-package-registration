@@ -5,6 +5,7 @@ Issue #2: Select a Lunch Package
 Issue #3: Choose Daily Meals
 Issue #4: Review Order and Total
 Issue #5: Track Lunch Orders
+Issue #6: Manage Daily Orders
 
 Page 1 ("/register") saves the camper and the parent or guardian's contact
 information in the database. Page 2 ("/") lets the parent pick one lunch
@@ -12,7 +13,11 @@ package and the camp days they need. Page 3 ("/meals") lets them pick one
 meal for each of those days. Page 4 ("/review") shows the whole order and
 its total, and confirming it saves the order in the database. The status
 page ("/order-status") shows how many lunches are ordered, completed, and
-remaining, and the status of each one.
+remaining, and the status of each one. If the café can't make a lunch, the
+parent can choose a different meal for just that day.
+
+Café attendants use "/cafe" (after entering the café passcode) to see each
+camp day's lunches and update their status.
 
 The browser (static/register.js, static/script.js, and static/meals.js) checks
 choices as the parent types and clicks, and this file checks everything again
@@ -30,6 +35,7 @@ What is stored where:
 To start the app:  flask --app app run --debug   (or: python app.py)
 """
 
+import hmac
 import os
 import secrets
 from functools import wraps
@@ -38,6 +44,8 @@ import click
 from flask import (
     Blueprint,
     Flask,
+    abort,
+    current_app,
     flash,
     get_flashed_messages,
     make_response,
@@ -50,7 +58,7 @@ from flask import (
 from flask.cli import with_appcontext
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from models import Camper, DailyLunch, Guardian, Order, db
+from models import Camper, DailyLunch, Guardian, LunchHistory, Order, db
 from registration import FIELDS, error_summary, format_phone, normalize_phone, validate_registration
 
 # All of the pages live in this "blueprint". create_app() attaches it to the app.
@@ -153,8 +161,16 @@ def create_app(test_config=None):
         os.makedirs(app.instance_path, exist_ok=True)
         app.config["SQLALCHEMY_DATABASE_URI"] = get_database_url(app.instance_path)
         app.config["SECRET_KEY"] = get_secret_key(app.instance_path)
+        # The shared passcode café attendants enter to open the daily-orders
+        # page. If it isn't set, the café pages stay locked.
+        app.config["CAFE_PASSCODE"] = os.environ.get("CAFE_PASSCODE", "").strip()
     else:
         app.config.update(test_config)
+
+    # "Lax" tells browsers not to send the session cookie with forms posted
+    # from other websites, so another site can't submit changes for a parent
+    # or café attendant who is signed in here.
+    app.config.setdefault("SESSION_COOKIE_SAMESITE", "Lax")
 
     # pool_pre_ping checks a connection still works before using it.
     # Hosted databases like Supabase close connections that sit idle.
@@ -997,6 +1013,43 @@ def camp_day_position(day):
     return CAMP_DAYS.index(day) if day in CAMP_DAYS else len(CAMP_DAYS)
 
 
+def meal_name(meal_id):
+    """The menu name for a meal ID (or the ID itself if it's no longer on the menu)."""
+    meal = find_meal(meal_id)
+    return meal["name"] if meal else meal_id
+
+
+def current_cafe_note(lunch):
+    """The café's note explaining why this lunch is unavailable right now, or None.
+
+    Only the most recent change counts, so a note from an earlier time the
+    lunch was unavailable is never shown as the current reason. A lunch can be
+    unavailable without a note if its status was set outside the café page.
+    """
+    if canonical_status(lunch.status) != "unavailable" or not lunch.history:
+        return None
+    latest = lunch.history[-1]
+    if latest.changed_by == "cafe" and latest.to_status == "unavailable" and latest.note:
+        return latest.note
+    return None
+
+
+def parent_history_lines(lunch):
+    """What a parent sees about past changes to a lunch, oldest first.
+
+    For example:
+      "Pepperoni Pizza + Fries + Drink was unavailable. Café note: Out of pepperoni."
+      "You changed this lunch to Cheese Pizza + Fries + Drink."
+    """
+    lines = []
+    for entry in lunch.history:
+        if entry.changed_by == "cafe" and entry.to_status == "unavailable" and entry.note:
+            lines.append({"kind": "note", "meal": meal_name(entry.from_meal_id), "note": entry.note})
+        elif entry.changed_by == "parent" and entry.from_meal_id != entry.to_meal_id:
+            lines.append({"kind": "swap", "meal": meal_name(entry.to_meal_id)})
+    return lines
+
+
 @bp.route("/order-status")
 @registration_required
 def order_status(camper):
@@ -1020,17 +1073,31 @@ def order_status(camper):
         orders.append({
             "id": saved_order.id,
             "package_name": package["name"] if package else saved_order.package_id,
+            "total_cents": saved_order.total_cents,
             "counts": count_lunches(lunches),
             "rows": [
                 {
+                    "lunch_id": lunch.id,
                     "day": lunch.camp_day,
-                    "meal_name": (find_meal(lunch.meal_id) or {"name": lunch.meal_id})["name"],
+                    "meal_name": meal_name(lunch.meal_id),
                     "status_label": lunch_status_label(lunch.status),
                     "status_class": lunch_status_class(lunch.status),
+                    # Only an unavailable lunch can get a different meal.
+                    "can_change_meal": canonical_status(lunch.status) == "unavailable",
+                    # Whether the café explained why it's unavailable; if not,
+                    # the page shows a general message instead.
+                    "has_current_note": current_cafe_note(lunch) is not None,
+                    "history": parent_history_lines(lunch),
                 }
                 for lunch in lunches
             ],
         })
+
+    # A message after choosing a different meal (or why it couldn't be changed).
+    message = None
+    for category, text in get_flashed_messages(with_categories=True):
+        if category in ("meal-changed", "meal-not-changed"):
+            message = {"text": text, "is_error": category == "meal-not-changed"}
 
     response = make_response(render_template(
         "status.html",
@@ -1038,11 +1105,370 @@ def order_status(camper):
         orders=orders,
         counts=count_lunches(all_lunches),
         on_status_page=True,
+        message=message,
     ))
     # Ask the browser not to keep a copy, so Back/Refresh always shows the
     # latest statuses from the database.
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# ---------- Choosing a different meal for an unavailable lunch (Issue #6) ----------
+
+def find_campers_lunch(camper, lunch_id):
+    """Return this camper's lunch with this ID, or stop with "Not Found".
+
+    The ID comes from the URL, so it is checked against the camper in the
+    session. Another camper's lunch looks exactly like one that doesn't exist.
+    """
+    lunch = db.session.get(DailyLunch, lunch_id)
+    if lunch is None or lunch.camper_id != camper.id or lunch.order.camper_id != camper.id:
+        abort(404)
+    return lunch
+
+
+def change_lunch_meal(lunch, new_meal):
+    """Swap an unavailable lunch's meal, put it back to "ordered", and update the order total.
+
+    Returns (old_total_cents, new_total_cents), or None if the lunch changed
+    first (for example, the café updated it, or the form was sent twice).
+    The update only happens if the lunch is still unavailable with the same
+    meal, so two requests can't both change it.
+    """
+    old_status = lunch.status
+    old_meal_id = lunch.meal_id
+    order = lunch.order
+    old_total = order.total_cents
+
+    result = db.session.execute(
+        db.update(DailyLunch)
+        .where(
+            DailyLunch.id == lunch.id,
+            DailyLunch.status == old_status,
+            DailyLunch.meal_id == old_meal_id,
+        )
+        .values(meal_id=new_meal["id"], price_cents=new_meal["price_cents"], status="ordered")
+    )
+    if result.rowcount != 1:
+        db.session.rollback()
+        return None
+
+    db.session.add(LunchHistory(
+        daily_lunch_id=lunch.id,
+        changed_by="parent",
+        from_status=canonical_status(old_status),
+        to_status="ordered",
+        from_meal_id=old_meal_id,
+        to_meal_id=new_meal["id"],
+    ))
+    # Add up the order again from its lunches, so the total always matches.
+    db.session.flush()
+    new_total = db.session.scalar(
+        db.select(db.func.sum(DailyLunch.price_cents)).where(DailyLunch.order_id == order.id)
+    )
+    order.total_cents = new_total
+    db.session.commit()
+    return old_total, new_total
+
+
+@bp.route("/order-status/lunches/<int:lunch_id>/change-meal", methods=["GET", "POST"])
+@registration_required
+def change_meal(camper, lunch_id):
+    """Let a parent pick a different meal for one lunch the café marked unavailable."""
+    lunch = find_campers_lunch(camper, lunch_id)
+
+    # Only unavailable lunches can be changed here. Completed, preparing, and
+    # ordered lunches can't, even if someone types this page's address.
+    if canonical_status(lunch.status) != "unavailable":
+        flash(
+            f"The {lunch.camp_day} lunch can't be changed here because its status is "
+            f"{lunch_status_label(lunch.status)}.",
+            "meal-not-changed",
+        )
+        return redirect(url_for("main.order_status"))
+
+    # The unavailable meal isn't offered again.
+    choices = [meal for meal in MEALS if meal["id"] != lunch.meal_id]
+    error = None
+    selected = None
+
+    if request.method == "POST":
+        selected = request.form.get("meal", "")
+        new_meal = find_meal(selected)
+        if new_meal is None or new_meal["id"] == lunch.meal_id:
+            error = "Please choose one of the meals listed."
+            selected = None
+        else:
+            day = lunch.camp_day
+            try:
+                totals = change_lunch_meal(lunch, new_meal)
+            except SQLAlchemyError:
+                db.session.rollback()
+                totals = None
+            if totals is None:
+                flash(f"The {day} lunch was already updated, so nothing was changed. "
+                      "Check its status below.", "meal-not-changed")
+                return redirect(url_for("main.order_status"))
+            old_total, new_total = totals
+            total_text = (
+                f"Your order total is now {format_price(new_total)}."
+                if new_total != old_total
+                else f"Your order total is still {format_price(new_total)}."
+            )
+            flash(f"{day} changed to {new_meal['name']}. It is back to Ordered. {total_text}", "meal-changed")
+            return redirect(url_for("main.order_status"))
+
+    return render_template(
+        "change_meal.html",
+        camper=camper,
+        lunch=lunch,
+        current_meal_name=meal_name(lunch.meal_id),
+        current_price_cents=lunch.price_cents,
+        cafe_note=current_cafe_note(lunch),
+        choices=choices,
+        selected=selected,
+        error=error,
+        order_total_cents=lunch.order.total_cents,
+    )
+
+
+# ---------- Café daily orders (Issue #6) ----------
+#
+# Café attendants enter a shared passcode (the CAFE_PASSCODE setting) once,
+# and the session remembers it. There are no separate accounts.
+
+# Which status changes the café can make. Every new lunch is "ordered".
+# The last two lines let an attendant undo a mistake.
+CAFE_STATUS_CHANGES = {
+    "ordered": ("preparing", "completed", "unavailable"),
+    "preparing": ("completed", "unavailable", "ordered"),
+    "completed": ("preparing",),
+    "unavailable": ("ordered",),
+}
+
+CAFE_NOTE_MAX_LENGTH = 300
+
+
+def cafe_button_label(current, new):
+    """The words on the button that changes a lunch from current to new status."""
+    if new == "preparing":
+        return "Start Preparing" if current == "ordered" else "Back to Preparing"
+    if new == "completed":
+        return "Mark Completed"
+    if new == "unavailable":
+        return "Mark Unavailable"
+    return "Back to Ordered"
+
+
+def cafe_signed_in():
+    """True if this browser entered the café passcode (and a passcode is set up)."""
+    return bool(current_app.config.get("CAFE_PASSCODE")) and session.get("cafe_attendant") is True
+
+
+def cafe_required(view):
+    """Send anyone who hasn't entered the café passcode to the café sign-in page."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not cafe_signed_in():
+            return redirect(url_for("main.cafe_login"))
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+@bp.route("/cafe/login", methods=["GET", "POST"])
+def cafe_login():
+    """Café attendants enter the shared passcode here."""
+    passcode = current_app.config.get("CAFE_PASSCODE", "")
+    error = None
+    if request.method == "POST":
+        entered = request.form.get("passcode", "")
+        # compare_digest takes the same time whether or not the start matches,
+        # so the passcode can't be guessed one letter at a time.
+        if passcode and hmac.compare_digest(entered.encode(), passcode.encode()):
+            session["cafe_attendant"] = True
+            return redirect(url_for("main.cafe_orders"))
+        error = "That passcode isn't right. Please try again."
+    elif cafe_signed_in():
+        return redirect(url_for("main.cafe_orders"))
+
+    return render_template("cafe_login.html", error=error, passcode_set_up=bool(passcode))
+
+
+@bp.route("/cafe/logout", methods=["POST"])
+def cafe_logout():
+    session.pop("cafe_attendant", None)
+    session.pop("cafe_update", None)
+    return redirect(url_for("main.cafe_login"))
+
+
+def cafe_day_page(day, errors=None, reasons=None):
+    """Build the café page for one camp day.
+
+    errors and reasons (both {lunch_id: text}) are used to show a lunch's form
+    again with its problem, after an attendant leaves out a required note.
+    """
+    errors = errors or {}
+    reasons = reasons or {}
+
+    rows = db.session.execute(
+        db.select(DailyLunch, Camper)
+        .join(Camper, Camper.id == DailyLunch.camper_id)
+        .where(DailyLunch.camp_day == day)
+        .order_by(Camper.last_name, Camper.first_name, DailyLunch.id)
+    ).all()
+
+    # How many lunches each day has, for the day buttons.
+    day_counts = dict(db.session.execute(
+        db.select(DailyLunch.camp_day, db.func.count()).group_by(DailyLunch.camp_day)
+    ).all())
+
+    # A message about the lunch that was just updated, shown on its card.
+    update = session.pop("cafe_update", None)
+    updated_id = update.get("lunch_id") if isinstance(update, dict) else None
+
+    lunches = []
+    status_totals = {status: 0 for status in LUNCH_STATUS_LABELS}
+    meal_totals = {}
+    for lunch, camper in rows:
+        status = canonical_status(lunch.status)
+        if status in status_totals:
+            status_totals[status] += 1
+        if status != "unavailable":
+            name = meal_name(lunch.meal_id)
+            meal_totals[name] = meal_totals.get(name, 0) + 1
+        lunches.append({
+            "id": lunch.id,
+            "camper_name": camper.full_name,
+            "meal_name": meal_name(lunch.meal_id),
+            "order_id": lunch.order_id,
+            "status": lunch.status,
+            "status_label": lunch_status_label(lunch.status),
+            "status_class": lunch_status_class(lunch.status),
+            "actions": [
+                {"status": new, "label": cafe_button_label(status, new)}
+                for new in CAFE_STATUS_CHANGES.get(status, ())
+            ],
+            "history": [
+                {"meal": meal_name(entry.from_meal_id), "note": entry.note}
+                for entry in lunch.history
+                if entry.changed_by == "cafe" and entry.note
+            ],
+            "parent_swaps": [
+                {"from": meal_name(entry.from_meal_id), "to": meal_name(entry.to_meal_id)}
+                for entry in lunch.history
+                if entry.changed_by == "parent" and entry.from_meal_id != entry.to_meal_id
+            ],
+            "message": update.get("message") if updated_id == lunch.id else None,
+            "message_is_error": bool(update.get("is_error")) if updated_id == lunch.id else False,
+            "error": errors.get(lunch.id),
+            "reason": reasons.get(lunch.id, ""),
+        })
+
+    response = make_response(render_template(
+        "cafe.html",
+        day=day,
+        camp_days=CAMP_DAYS,
+        day_counts=day_counts,
+        lunches=lunches,
+        status_totals=status_totals,
+        status_labels=LUNCH_STATUS_LABELS,
+        meal_totals=sorted(meal_totals.items()),
+        note_max_length=CAFE_NOTE_MAX_LENGTH,
+    ))
+    # Always show the latest statuses, never a copy the browser kept.
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@bp.route("/cafe")
+@cafe_required
+def cafe_orders():
+    """Show one camp day's lunches for the café (Day 1 unless another day is chosen)."""
+    day = request.args.get("day", CAMP_DAYS[0])
+    if day not in CAMP_DAYS:
+        day = CAMP_DAYS[0]
+    return cafe_day_page(day)
+
+
+@bp.route("/cafe/lunches/<int:lunch_id>/status", methods=["POST"])
+@cafe_required
+def cafe_update_status(lunch_id):
+    """Change one lunch's status. Everything is checked against the database."""
+    lunch = db.session.get(DailyLunch, lunch_id)
+    if lunch is None:
+        abort(404)
+
+    day = lunch.camp_day  # always return to the lunch's own day, not one sent by the browser
+    current = canonical_status(lunch.status)
+    new_status = request.form.get("status", "")
+    # The status the attendant saw when the page was drawn. If it no longer
+    # matches the database, someone else changed this lunch in the meantime.
+    expected = request.form.get("expected_status", "")
+    reason = request.form.get("reason", "").strip()
+    camper = db.session.get(Camper, lunch.camper_id)
+
+    if expected != lunch.status:
+        session["cafe_update"] = {
+            "lunch_id": lunch.id,
+            "message": f"Not changed: this lunch was already updated to {lunch_status_label(lunch.status)}.",
+            "is_error": True,
+        }
+        return redirect(url_for("main.cafe_orders", day=day, _anchor=f"lunch-{lunch.id}"))
+
+    if new_status not in CAFE_STATUS_CHANGES.get(current, ()):
+        session["cafe_update"] = {
+            "lunch_id": lunch.id,
+            "message": f"Not changed: a lunch that is {lunch_status_label(lunch.status)} can't be changed that way.",
+            "is_error": True,
+        }
+        return redirect(url_for("main.cafe_orders", day=day, _anchor=f"lunch-{lunch.id}"))
+
+    if new_status == "unavailable":
+        if not reason:
+            return cafe_day_page(day, errors={lunch.id: "Please explain why this lunch is unavailable. "
+                                                        "The parent will see this note."})
+        if len(reason) > CAFE_NOTE_MAX_LENGTH:
+            return cafe_day_page(
+                day,
+                errors={lunch.id: f"Please keep the note to {CAFE_NOTE_MAX_LENGTH} characters or fewer."},
+                reasons={lunch.id: reason},
+            )
+    else:
+        reason = None  # notes are only kept for unavailable lunches
+
+    # Only update if the status is still what we just read, so two attendants
+    # can't both change the same lunch at once.
+    result = db.session.execute(
+        db.update(DailyLunch)
+        .where(DailyLunch.id == lunch.id, DailyLunch.status == lunch.status)
+        .values(status=new_status)
+    )
+    if result.rowcount != 1:
+        db.session.rollback()
+        session["cafe_update"] = {
+            "lunch_id": lunch.id,
+            "message": "Not changed: this lunch was just updated by someone else.",
+            "is_error": True,
+        }
+        return redirect(url_for("main.cafe_orders", day=day, _anchor=f"lunch-{lunch.id}"))
+
+    db.session.add(LunchHistory(
+        daily_lunch_id=lunch.id,
+        changed_by="cafe",
+        from_status=current,
+        to_status=new_status,
+        from_meal_id=lunch.meal_id,
+        to_meal_id=lunch.meal_id,
+        note=reason,
+    ))
+    db.session.commit()
+
+    session["cafe_update"] = {
+        "lunch_id": lunch.id,
+        "message": f"Updated: {camper.full_name}'s {day} lunch is now {lunch_status_label(new_status)}.",
+    }
+    return redirect(url_for("main.cafe_orders", day=day, _anchor=f"lunch-{lunch.id}"))
 
 
 # This lets you start the app with "python app.py".

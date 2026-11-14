@@ -25,6 +25,11 @@
   </header>
 
   <main id="main" class="container">
+    <!-- After choosing a different meal (or if it couldn't be changed) -->
+    {% if message %}
+      <div class="alert {% if message.is_error %}alert-error{% else %}alert-success{% endif %}" role="status">{{ message.text }}</div>
+    {% endif %}
+
     {% include "_camper_bar.html" %}
 
     <section class="card" aria-labelledby="status-heading">
@@ -86,6 +91,7 @@
           <span class="nowrap">{{ order.counts.remaining }} remaining</span>
           {%- if order.counts.unavailable %} · <span class="nowrap">{{ order.counts.unavailable }} unavailable</span>{% endif %}
         </p>
+        <p class="order-total-line">Order total: <strong id="order-{{ order.id }}-total">{{ order.total_cents|price }}</strong></p>
 
         <table class="order-table status-table">
           <caption class="visually-hidden">Lunches in order {{ order.id }}</caption>
@@ -96,16 +102,51 @@
               <th scope="col">Status</th>
             </tr>
           </thead>
-          <tbody>
-            {% for row in order.rows %}
+          <!-- Each lunch is its own row group, so a lunch and its café note
+               stay together as one unit with a line between lunches. -->
+          {% for row in order.rows %}
+            <tbody class="lunch-group">
               <tr>
                 <th scope="row">{{ row.day }}</th>
                 <td>{{ row.meal_name }}</td>
                 <!-- The status is written out, so it doesn't rely on color -->
                 <td><span class="status-badge {{ row.status_class }}">{{ row.status_label }}</span></td>
               </tr>
-            {% endfor %}
-          </tbody>
+              {% if row.history or row.can_change_meal %}
+                <!-- Café notes and meal changes, right under this lunch's meal -->
+                <tr class="lunch-details">
+                  <td class="lunch-details-spacer"></td>
+                  <td colspan="2">
+                    <div class="lunch-callout{% if row.can_change_meal %} lunch-callout-unavailable{% endif %}">
+                      <span class="visually-hidden">{{ row.day }}: </span>
+                      {% if row.history %}
+                        <ul class="lunch-history">
+                          {% for line in row.history %}
+                            {% if line.kind == "note" %}
+                              <li>{{ line.meal }} was unavailable. <span class="cafe-note">Café note: “{{ line.note }}”</span></li>
+                            {% else %}
+                              <li>You changed this lunch to {{ line.meal }}.</li>
+                            {% endif %}
+                          {% endfor %}
+                        </ul>
+                      {% endif %}
+                      {% if row.can_change_meal and not row.has_current_note %}
+                        <!-- No café note for this time, so say what happened in general terms -->
+                        <p class="callout-fallback">This meal is unavailable. Choose a different meal for this day.</p>
+                      {% endif %}
+                      {% if row.can_change_meal %}
+                        <a
+                          class="button button-secondary change-meal-button"
+                          href="{{ url_for('main.change_meal', lunch_id=row.lunch_id) }}"
+                          aria-label="Choose a different meal for {{ row.day }}"
+                        >Choose a Different Meal</a>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          {% endfor %}
         </table>
       </section>
     {% else %}

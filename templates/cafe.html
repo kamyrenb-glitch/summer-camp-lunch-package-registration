@@ -1,0 +1,162 @@
+{#
+  Café daily-orders page for Issue #6.
+  Shows every lunch for one camp day (camper, meal, order number, status) and
+  buttons to update each lunch. app.py checks every change against the
+  database before saving it.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ day }} Orders | Tucker Road Ice Rink Café</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container cafe-header">
+      <div>
+        <p class="eyebrow">Tucker Road Ice Rink · Café</p>
+        <h1>Daily Lunch Orders</h1>
+      </div>
+      <form method="post" action="{{ url_for('main.cafe_logout') }}">
+        <button type="submit" class="button button-secondary cafe-signout">Sign Out</button>
+      </form>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <!-- Pick a camp day. aria-current marks the day being shown. -->
+    <nav class="day-nav" aria-label="Camp days">
+      {% for camp_day in camp_days %}
+        <a
+          class="day-nav-link"
+          href="{{ url_for('main.cafe_orders', day=camp_day) }}"
+          {% if camp_day == day %}aria-current="page"{% endif %}
+        >
+          <span class="day-nav-name">{{ camp_day }}</span>
+          <span class="day-nav-count">{{ day_counts.get(camp_day, 0) }} {{ "lunch" if day_counts.get(camp_day, 0) == 1 else "lunches" }}</span>
+        </a>
+      {% endfor %}
+    </nav>
+
+    <section class="card" aria-labelledby="day-heading">
+      <div class="status-heading-row">
+        <h2 id="day-heading">{{ day }}: {{ lunches|length }} {{ "lunch" if lunches|length == 1 else "lunches" }}</h2>
+        <a class="button button-secondary refresh-button" href="{{ url_for('main.cafe_orders', day=day) }}">Refresh</a>
+      </div>
+
+      <!-- How many lunches have each status today -->
+      <dl class="status-summary cafe-summary">
+        {% for status, label in status_labels.items() %}
+          <div class="status-count">
+            <dt><span class="status-badge status-{{ status }}">{{ label }}</span></dt>
+            <dd id="day-count-{{ status }}">{{ status_totals[status] }}</dd>
+          </div>
+        {% endfor %}
+      </dl>
+
+      {% if meal_totals %}
+        <!-- What to make today (unavailable lunches aren't counted) -->
+        <h3 class="meal-totals-heading">Meals to make</h3>
+        <ul class="meal-totals">
+          {% for name, total in meal_totals %}
+            <li><strong>{{ total }}</strong> × {{ name }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    {% if not lunches %}
+      <section class="card">
+        <p class="empty-status">No lunches are ordered for {{ day }}.</p>
+      </section>
+    {% endif %}
+
+    <!-- One card per lunch -->
+    <div class="lunch-cards">
+      {% for lunch in lunches %}
+        <article id="lunch-{{ lunch.id }}" class="lunch-card" aria-labelledby="lunch-{{ lunch.id }}-name">
+          <div class="lunch-card-top">
+            <h3 id="lunch-{{ lunch.id }}-name">{{ lunch.camper_name }}</h3>
+            <span class="status-badge {{ lunch.status_class }}">{{ lunch.status_label }}</span>
+          </div>
+          <p class="lunch-card-meal">{{ lunch.meal_name }}</p>
+          <p class="lunch-card-order">Order {{ lunch.order_id }}</p>
+
+          {% if lunch.history or lunch.parent_swaps %}
+            <ul class="lunch-history">
+              {% for entry in lunch.history %}
+                <li>{{ entry.meal }} marked unavailable: <span class="cafe-note">“{{ entry.note }}”</span></li>
+              {% endfor %}
+              {% for swap in lunch.parent_swaps %}
+                <li>Parent changed {{ swap.from }} to {{ swap.to }}.</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+
+          {% if lunch.message %}
+            <!-- The result of the last change to this lunch. cafe.js moves focus here. -->
+            <p class="lunch-card-message{% if lunch.message_is_error %} lunch-card-message-error{% endif %}" role="status" tabindex="-1">
+              {{ lunch.message }}
+            </p>
+          {% endif %}
+
+          <div class="lunch-actions">
+            {% for action in lunch.actions if action.status != "unavailable" %}
+              <form method="post" action="{{ url_for('main.cafe_update_status', lunch_id=lunch.id) }}">
+                <input type="hidden" name="status" value="{{ action.status }}">
+                <!-- The status shown on this page, so the server can tell if
+                     someone else changed the lunch first. -->
+                <input type="hidden" name="expected_status" value="{{ lunch.status }}">
+                <button
+                  type="submit"
+                  class="button {% if action.status == 'completed' %}button-complete{% else %}button-secondary{% endif %}"
+                  aria-label="{{ action.label }}: {{ lunch.camper_name }}"
+                >{{ action.label }}</button>
+              </form>
+            {% endfor %}
+          </div>
+
+          {% for action in lunch.actions if action.status == "unavailable" %}
+            <!-- Marking a lunch unavailable needs a note for the parent.
+                 <details> opens and closes with the keyboard and without JavaScript. -->
+            <details class="unavailable-form" {% if lunch.error %}open{% endif %}>
+              <summary>Mark Unavailable…</summary>
+              <form method="post" action="{{ url_for('main.cafe_update_status', lunch_id=lunch.id) }}" novalidate>
+                <input type="hidden" name="status" value="unavailable">
+                <input type="hidden" name="expected_status" value="{{ lunch.status }}">
+                <div class="field{% if lunch.error %} field-invalid{% endif %}">
+                  <label for="reason-{{ lunch.id }}">Reason (the parent will see this)</label>
+                  <p id="reason-{{ lunch.id }}-error" class="field-error" role="alert" {% if not lunch.error %}hidden{% endif %}>{{ lunch.error or "" }}</p>
+                  <textarea
+                    id="reason-{{ lunch.id }}"
+                    name="reason"
+                    rows="2"
+                    maxlength="{{ note_max_length }}"
+                    required
+                    aria-describedby="reason-{{ lunch.id }}-error"
+                    {% if lunch.error %}aria-invalid="true" autofocus{% endif %}
+                  >{{ lunch.reason }}</textarea>
+                </div>
+                <button type="submit" class="button button-discard" aria-label="Mark Unavailable: {{ lunch.camper_name }}">Mark Unavailable</button>
+              </form>
+            </details>
+          {% endfor %}
+        </article>
+      {% endfor %}
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='cafe.js') }}"></script>
+</body>
+</html>

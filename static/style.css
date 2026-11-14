@@ -373,6 +373,9 @@ fieldset {
   text-align: center;
   text-decoration: none; /* for links styled as buttons */
   font-family: inherit;
+  /* Buttons and links use different line heights by default; setting one
+     makes a link-button exactly as tall as a real button next to it. */
+  line-height: 1.25;
   padding: 12px 28px;
   border: 0;
   border-radius: 8px;
@@ -873,6 +876,294 @@ html:has(.edit-bar) {
   color: var(--navy);
 }
 
+/* ---------- Café notes and meal changes on the parent's status page (Issue #6) ---------- */
+
+.order-total-line {
+  margin: 0 0 8px;
+  color: var(--navy);
+}
+
+/* Each lunch is its own row group with one line under the whole group, so a
+   lunch and its café note stay together and two lunches never run together. */
+.status-table tbody.lunch-group > tr > th,
+.status-table tbody.lunch-group > tr > td {
+  border-bottom: 0;
+}
+
+.status-table tbody.lunch-group {
+  border-bottom: 1px solid var(--ice-mid);
+}
+
+/* Less space between a lunch and the note row under it */
+.status-table tbody.lunch-group > tr:has(+ .lunch-details) > * {
+  padding-bottom: 4px;
+}
+
+.lunch-details td {
+  padding-top: 0;
+}
+
+/* The note box under a lunch's meal: light ice blue for past changes... */
+.lunch-callout {
+  padding: 8px 12px;
+  border-left: 4px solid var(--ice-dark);
+  border-radius: 6px;
+  background: var(--ice);
+}
+
+/* ...and light red, with its button inside, while the lunch is unavailable */
+.lunch-callout-unavailable {
+  border-left-color: var(--red);
+  background: var(--red-light);
+}
+
+.lunch-history {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.lunch-callout .lunch-history {
+  margin: 0;
+}
+
+.lunch-history li {
+  margin-bottom: 2px;
+}
+
+/* Shown in the note box when the café didn't leave a note */
+.callout-fallback {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.lunch-history + .callout-fallback {
+  margin-top: 6px;
+}
+
+.cafe-note {
+  font-style: italic;
+}
+
+/* A small outlined button, so it doesn't overpower the table */
+.change-meal-button {
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  min-height: 36px;
+}
+
+.cafe-note-box {
+  padding: 10px 14px;
+  border-left: 5px solid var(--red);
+  border-radius: 8px;
+  background: var(--red-light);
+}
+
+.change-total-note {
+  margin: 12px 0 16px;
+}
+
+/* ---------- Café daily-orders pages (Issue #6) ---------- */
+
+.cafe-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cafe-header form {
+  margin: 0;
+}
+
+.cafe-signout {
+  padding: 8px 16px;
+  border-color: var(--white);
+}
+
+.cafe-login {
+  max-width: 480px;
+}
+
+/* Twelve camp-day buttons: 6 across on wide screens, 3 across on phones */
+.day-nav {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.day-nav-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border: 2px solid var(--ice-mid);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--navy);
+  text-decoration: none;
+  min-height: 48px;
+}
+
+.day-nav-link:hover {
+  border-color: var(--ice-dark);
+}
+
+.day-nav-name {
+  font-weight: 700;
+}
+
+.day-nav-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* The day being shown: navy, like a selected tab */
+.day-nav-link[aria-current="page"] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--white);
+}
+
+.day-nav-link[aria-current="page"] .day-nav-count {
+  color: var(--ice-mid);
+}
+
+.cafe-summary .status-count dt {
+  color: inherit;
+}
+
+.meal-totals-heading {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.meal-totals {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* Lunch cards: 2 across on wide screens, 1 on phones */
+.lunch-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.lunch-card {
+  padding: 16px;
+  border: 1px solid var(--ice-mid);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  scroll-margin-top: 16px;
+}
+
+.lunch-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lunch-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+
+.lunch-card-meal {
+  margin: 6px 0 0;
+  font-weight: 600;
+}
+
+.lunch-card-order {
+  margin: 2px 0 10px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.lunch-card-message {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 4px solid var(--green);
+  border-radius: 6px;
+  background: var(--green-light);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.lunch-card-message-error {
+  border-color: var(--red);
+  background: var(--red-light);
+  color: var(--red);
+}
+
+.lunch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lunch-actions form {
+  margin: 0;
+}
+
+.lunch-actions .button {
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  min-height: 44px;
+}
+
+/* "Mark Completed" is the most common action, so it's green */
+.button-complete {
+  background: var(--green);
+  color: var(--white);
+}
+
+.button-complete:hover {
+  background: #23652a;
+}
+
+.unavailable-form {
+  margin-top: 10px;
+}
+
+.unavailable-form summary {
+  display: inline-block;
+  padding: 8px 4px;
+  color: var(--red);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.unavailable-form form {
+  margin-top: 8px;
+}
+
+.unavailable-form textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 2px solid var(--ice-dark);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.unavailable-form .field-invalid textarea {
+  border-color: var(--red);
+}
+
+.unavailable-form .field {
+  margin-bottom: 10px;
+}
+
 /* ---------- Meal page ---------- */
 
 .summary-days {
@@ -962,6 +1253,30 @@ html:has(.edit-bar) {
     0 0 0 4px var(--focus-blue);
 }
 
+/* Change-meal page: however many meals are offered, the cards split the row
+   evenly. Grid items stretch, so the cards are always the same height. */
+.meal-options-fill {
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
+.meal-options-fill .meal-option {
+  padding: 16px;
+}
+
+/* Hovering anywhere on a card that isn't chosen shows it can be clicked */
+.meal-options-fill .meal-option:not(:has(input:checked)):hover {
+  border-color: var(--navy);
+  background: var(--ice);
+}
+
+/* When the radio button has keyboard focus, outline the whole card too */
+.meal-options-fill .meal-option:has(input:focus-visible) {
+  outline: 3px solid var(--focus-blue);
+  outline-offset: 3px;
+}
+
 /* A day that still needs a meal gets red borders */
 .meal-day-invalid .meal-option {
   border-color: var(--red);
@@ -984,6 +1299,11 @@ html:has(.edit-bar) {
 
   .meal-options {
     grid-template-columns: 1fr;
+  }
+
+  /* On phones the change-meal cards stack, each the full width */
+  .meal-options-fill {
+    grid-auto-flow: row;
   }
 
   .field-row {
@@ -1036,6 +1356,21 @@ html:has(.edit-bar) {
   }
 
   .status-heading-row .refresh-button {
+    width: auto;
+  }
+
+  /* Café pages on phones */
+  .day-nav {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lunch-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .lunch-actions .button,
+  .cafe-signout,
+  .change-meal-button {
     width: auto;
   }
 

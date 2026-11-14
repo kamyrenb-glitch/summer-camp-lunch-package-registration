@@ -10,6 +10,7 @@ Tables:
   campers       - each camper, linked to one guardian by guardian_id
   orders        - a confirmed lunch order for one camper (Issue #4)
   daily_lunches - one row per camp day in an order, with the meal chosen
+  lunch_history - every status change, café note, and meal swap (Issue #6)
 
 This matches the class diagram, where a parent/guardian (User) manages
 zero or more Campers, a Camper has Orders, and an Order contains 1 to 12
@@ -133,8 +134,43 @@ class DailyLunch(db.Model):
     #   "preparing"   - the café is making it
     #   "completed"   - the camper received it
     #   "unavailable" - the café couldn't make it
-    # The café changes it in Issue #6. app.py turns these into the words
-    # parents see (LUNCH_STATUS_LABELS).
+    # The café changes it on the daily-orders page (Issue #6). A parent's meal
+    # swap puts an "unavailable" lunch back to "ordered". app.py turns these
+    # into the words people see (LUNCH_STATUS_LABELS).
     status: Mapped[str] = mapped_column(String(20), default="ordered")
 
     order: Mapped[Order] = relationship(back_populates="daily_lunches")
+    # Every change to this lunch, oldest first (see LunchHistory).
+    history: Mapped[list["LunchHistory"]] = relationship(
+        back_populates="daily_lunch", cascade="all, delete-orphan", order_by="LunchHistory.id"
+    )
+
+
+class LunchHistory(db.Model):
+    """One change to a daily lunch, kept forever as a record (Issue #6).
+
+    Two kinds of changes are saved here:
+      - the café changes the status (changed_by="cafe"), with the attendant's
+        note when a lunch is marked "unavailable"
+      - a parent picks a different meal for an unavailable lunch
+        (changed_by="parent"), which records the old and new meal
+
+    Nothing is ever deleted, so an attendant's note is still here after the
+    parent picks a different meal.
+    """
+
+    __tablename__ = "lunch_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    daily_lunch_id: Mapped[int] = mapped_column(ForeignKey("daily_lunches.id"), index=True)
+    changed_by: Mapped[str] = mapped_column(String(20))  # "cafe" or "parent"
+    from_status: Mapped[str] = mapped_column(String(20))
+    to_status: Mapped[str] = mapped_column(String(20))
+    # The meal before and after the change (the same unless a parent swapped it).
+    from_meal_id: Mapped[str] = mapped_column(String(40))
+    to_meal_id: Mapped[str] = mapped_column(String(40))
+    # The attendant's note; required when a lunch is marked "unavailable".
+    note: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    daily_lunch: Mapped[DailyLunch] = relationship(back_populates="history")
