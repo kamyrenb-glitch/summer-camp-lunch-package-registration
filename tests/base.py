@@ -47,6 +47,7 @@ class AppTestCase(unittest.TestCase):
         self.app = create_app({
             "TESTING": True,
             "SECRET_KEY": "test-only-key",
+            "CAFE_PASSCODE": "test-cafe-passcode",
             "SQLALCHEMY_DATABASE_URI": "sqlite:///" + database_path,
         })
         # Safety check: stop right away if this isn't the temporary database.

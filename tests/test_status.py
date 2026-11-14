@@ -37,7 +37,7 @@ def all_counts(html):
 def status_rows(html):
     """Return [(day, meal, status label), ...] from every status table on the page."""
     rows = []
-    for body in re.findall(r"<tbody>(.*?)</tbody>", html, re.S):
+    for body in re.findall(r"<tbody[^>]*>(.*?)</tbody>", html, re.S):
         for row in re.findall(r"<tr>(.*?)</tr>", body, re.S):
             cells = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)
             rows.append(tuple(re.sub(r"<[^>]+>", "", cell).strip() for cell in cells))

@@ -1,0 +1,64 @@
+{#
+  Café sign-in page for Issue #6.
+  Café attendants enter the shared passcode (the CAFE_PASSCODE setting) to
+  open the daily-orders page. There are no separate accounts.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Café Sign In | Tucker Road Ice Rink Summer Camp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">Tucker Road Ice Rink · Café</p>
+      <h1>Daily Lunch Orders</h1>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <section class="card cafe-login" aria-labelledby="cafe-login-heading">
+      <h2 id="cafe-login-heading">Café sign in</h2>
+
+      {% if not passcode_set_up %}
+        <!-- No CAFE_PASSCODE setting, so the café pages stay locked -->
+        <p class="alert alert-info" role="status">
+          Café access isn't set up yet. An administrator needs to set the
+          CAFE_PASSCODE setting (see the README).
+        </p>
+      {% else %}
+        <form method="post" action="{{ url_for('main.cafe_login') }}">
+          <div class="field{% if error %} field-invalid{% endif %}">
+            <label for="passcode">Café passcode</label>
+            <p id="passcode-error" class="field-error" {% if not error %}hidden{% endif %}>{{ error or "" }}</p>
+            <input
+              id="passcode"
+              name="passcode"
+              type="password"
+              autocomplete="current-password"
+              required
+              aria-describedby="passcode-error"
+              {% if error %}aria-invalid="true" autofocus{% endif %}
+            >
+          </div>
+          <div class="button-row">
+            <button type="submit" class="button">Sign In</button>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    </div>
+  </footer>
+</body>
+</html>

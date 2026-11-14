@@ -1,0 +1,84 @@
+{#
+  "Choose a Different Meal" page for Issue #6.
+  When the café marks a lunch unavailable, the parent picks a new meal for
+  that one day here. app.py checks that the lunch belongs to this camper and
+  is still unavailable, and looks up the new meal's price itself.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choose a Different Meal | Tucker Road Ice Rink Summer Camp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <!-- Lets keyboard users jump straight past the header -->
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">Tucker Road Ice Rink</p>
+      <h1>Summer Camp Lunch Registration</h1>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    {% include "_camper_bar.html" %}
+
+    <section class="card" aria-labelledby="change-heading">
+      <h2 id="change-heading">Choose a different meal for {{ lunch.camp_day }}</h2>
+      <p>
+        The café can't make <strong>{{ current_meal_name }}</strong> ({{ current_price_cents|price }})
+        for {{ lunch.camp_day }}. Only this day will change.
+      </p>
+      {% if cafe_note %}
+        <p class="cafe-note-box"><strong>Café note:</strong> “{{ cafe_note }}”</p>
+      {% endif %}
+
+      <form id="change-meal-form" method="post" action="{{ url_for('main.change_meal', lunch_id=lunch.id) }}" novalidate>
+        <fieldset class="meal-day{% if error %} meal-day-invalid{% endif %}" aria-describedby="change-meal-error total-note">
+          <legend class="meal-day-title">New meal for {{ lunch.camp_day }}</legend>
+
+          <p id="change-meal-error" class="meal-day-error" {% if not error %}hidden{% endif %}>{{ error or "" }}</p>
+
+          <!-- meal-options-fill: the cards share the row evenly and match in height -->
+          <div class="meal-options meal-options-fill">
+            {% for meal in choices %}
+              {% set difference = meal.price_cents - current_price_cents %}
+              <label class="meal-option">
+                <!-- Only the meal's ID is sent. The server looks up its price. -->
+                <input type="radio" name="meal" value="{{ meal.id }}" {% if selected == meal.id %}checked{% endif %}>
+                <span class="meal-name">{{ meal.name }}</span>
+                <span class="meal-price">
+                  {{ meal.price_cents|price }}
+                  {% if difference > 0 %}(+{{ difference|price }}){% elif difference < 0 %}(−{{ (0 - difference)|price }}){% else %}(same price){% endif %}
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+
+        <p id="total-note" class="hint change-total-note">
+          Your order total is {{ order_total_cents|price }}. It will change if the new meal costs a different amount.
+          The lunch will go back to Ordered.
+        </p>
+
+        <div class="button-row">
+          <button type="submit" class="button">Save New Meal</button>
+          <a class="button button-secondary" href="{{ url_for('main.order_status') }}">Cancel</a>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='change-meal.js') }}"></script>
+</body>
+</html>
