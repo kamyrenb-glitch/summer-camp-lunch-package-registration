@@ -1,0 +1,32 @@
+{#
+  The "Editing your order" bar, shown on the package and meal pages when the
+  parent came from the review page to change something. It stays at the top
+  of the screen while scrolling (see .edit-bar in style.css).
+
+  Needs:
+    review_bar  - from review_bar() in app.py
+    track_form  - the id of the form to watch for unsaved changes
+
+  data-saved-state describes what is saved right now. edit-bar.js compares it
+  with the page to tell whether there are unsaved changes.
+#}
+<nav
+  class="edit-bar"
+  aria-label="Editing your order"
+  data-track-form="{{ track_form }}"
+  data-saved-state="{{ review_bar.saved_state }}"
+>
+  <p class="edit-bar-text">
+    <strong>Editing your order</strong>
+    {% if review_bar.missing_days %}
+      <span class="edit-bar-warning">
+        {{ review_bar.missing_text }} {{ "needs" if review_bar.missing_days|length == 1 else "need" }}
+        a meal before you can return to review.
+      </span>
+    {% else %}
+      <!-- Hidden on phones to keep the bar short; the warning above never is. -->
+      <span class="edit-bar-hint">Save any changes, then return to review.</span>
+    {% endif %}
+  </p>
+  <a id="return-to-review" class="button edit-bar-button" href="{{ url_for('main.review') }}">Return to Review</a>
+</nav>

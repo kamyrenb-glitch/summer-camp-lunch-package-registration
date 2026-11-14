@@ -1,0 +1,25 @@
+{#
+  The warning shown when "Return to Review" is pressed with unsaved changes.
+  A <dialog> opened with showModal() keeps keyboard focus inside it, and the
+  Escape key closes it ("Keep Editing").
+
+  Needs:
+    dialog_text - what will be lost
+    save_form   - (meal page only) the id of the form to save before returning
+
+  This is included AFTER the form on purpose: the Save button belongs to that
+  form, and the first submit button in the page is the one Enter presses.
+#}
+<dialog id="unsaved-dialog" class="unsaved-dialog" aria-labelledby="unsaved-title" aria-describedby="unsaved-text">
+  <h2 id="unsaved-title">You have unsaved changes</h2>
+  <p id="unsaved-text">{{ dialog_text }}</p>
+  <div class="dialog-buttons">
+    <button type="button" class="button button-secondary" data-dialog="keep" autofocus>Keep Editing</button>
+    {% if save_form %}
+      <button type="submit" form="{{ save_form }}" name="action" value="save-review" class="button" data-dialog="save">
+        Save and Return to Review
+      </button>
+    {% endif %}
+    <button type="button" class="button button-discard" data-dialog="discard">Discard Changes and Return</button>
+  </div>
+</dialog>

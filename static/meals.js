@@ -8,6 +8,7 @@
   3. Shows the result message near the save button and moves focus to it.
   4. Keeps unsaved meal choices when the parent clicks
      "Edit camper & contact information".
+  5. Hides "Review Order" while there are unsaved changes.
 
   app.py checks every choice again on the server, so this file is about giving
   the parent quick, friendly feedback while they click.
@@ -66,12 +67,17 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // When a meal is picked, that day is fixed, and any old banner
-  // (like "saved") is out of date.
+  // (like "saved") is out of date. The "Review Order" link is hidden too,
+  // because the review page only shows saved meals. Saving brings it back.
+  const reviewLink = document.getElementById("review-link");
   dayGroups.forEach(function (dayGroup) {
     dayGroup.addEventListener("change", function () {
       setDayError(dayGroup, false);
       hideFormMessage();
       updateCounter();
+      if (reviewLink) {
+        reviewLink.hidden = true;
+      }
     });
   });
 
