@@ -8,8 +8,18 @@ Built with Python, Flask, Flask-SQLAlchemy, HTML, CSS, and vanilla JavaScript.
 1. **Register a camper** (`/register`) – camper name and parent/guardian contact information, saved in the database.
 2. **Choose a lunch package** (`/`) – a 4-, 6-, or 12-day package and the camp days.
 3. **Choose daily meals** (`/meals`) – one meal for each selected day.
+4. **Review order and total** (`/review`) – check every day, meal, and price, then confirm. Confirmed orders are saved in the database.
 
-The package and meal pages send you to the registration page until a camper is registered.
+The package, meal, and review pages send you to the registration page until a camper is registered.
+
+## Database tables
+
+| Table | What it holds |
+| --- | --- |
+| `guardians` | Parent or guardian name, email, and phone |
+| `campers` | Camper name, linked to a guardian |
+| `orders` | A confirmed order: camper, package, total (in cents), status |
+| `daily_lunches` | One row per camp day in an order: the meal and its price (in cents) |
 
 ## Run it on your computer
 
@@ -50,7 +60,10 @@ ignored by git, so real passwords and keys are never committed.
    ```
 
 `init-db` only creates tables that don't exist yet. It never deletes or replaces
-tables or data, so it is safe to run again. Normal startup never changes the
+tables or data, so it is safe to run again. **Run it again after updating to a
+version that adds tables** (for example, the `orders` and `daily_lunches`
+tables for order review). The local SQLite database gets new tables
+automatically when the app starts. Normal startup never changes the
 deployed database's tables. (Changing columns in an existing table later will
 need a migration tool such as Flask-Migrate.)
 

@@ -3,11 +3,13 @@ Summer Camp Lunch Package Registration - Tucker Road Ice Rink
 Issue #1: Register a Camper
 Issue #2: Select a Lunch Package
 Issue #3: Choose Daily Meals
+Issue #4: Review Order and Total
 
 Page 1 ("/register") saves the camper and the parent or guardian's contact
 information in the database. Page 2 ("/") lets the parent pick one lunch
 package and the camp days they need. Page 3 ("/meals") lets them pick one
-meal for each of those days.
+meal for each of those days. Page 4 ("/review") shows the whole order and
+its total, and confirming it saves the order in the database.
 
 The browser (static/register.js, static/script.js, and static/meals.js) checks
 choices as the parent types and clicks, and this file checks everything again
@@ -16,9 +18,11 @@ skipped or changed.
 
 What is stored where:
   - The database holds camper and contact information (see models.py).
-  - Flask's session holds only the camper's database ID and the in-progress
-    lunch order (package, days, and meal IDs). No names, emails, or phone
-    numbers are ever put in the session.
+  - Flask's session holds only the camper's database ID, the in-progress
+    lunch order (package, days, and meal IDs), and the ID of the last
+    confirmed order. No names, emails, or phone numbers are ever put in
+    the session.
+  - Confirmed orders and their daily lunches are saved in the database.
 
 To start the app:  flask --app app run --debug   (or: python app.py)
 """
@@ -40,9 +44,9 @@ from flask import (
     url_for,
 )
 from flask.cli import with_appcontext
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from models import Camper, Guardian, db
+from models import Camper, DailyLunch, Guardian, Order, db
 from registration import FIELDS, error_summary, format_phone, normalize_phone, validate_registration
 
 # All of the pages live in this "blueprint". create_app() attaches it to the app.
@@ -256,6 +260,8 @@ def get_current_camper():
         # The record is gone, so the session (and its order) no longer makes sense.
         session.pop("camper_id", None)
         session.pop("order", None)
+        session.pop("last_order_id", None)
+        session.pop("return_to_review", None)
     return camper
 
 
@@ -403,6 +409,165 @@ def read_meal_choices(form, days):
     return choices, None, []
 
 
+# ---------- Reviewing and confirming the order ----------
+
+def days_missing_meals(order):
+    """Return the camp days in the order that don't have a meal yet."""
+    return [day for day in order["days"] if day not in order["meals"]]
+
+
+def order_lines(order):
+    """List each camp day with its meal and price, for the review page.
+
+    The meal name and price are looked up in MEALS on the server.
+    """
+    lines = []
+    for day in order["days"]:
+        meal = find_meal(order["meals"][day]["meal_id"])
+        lines.append({"day": day, "meal_name": meal["name"], "price_cents": meal["price_cents"]})
+    return lines
+
+
+def calculate_total_cents(lines):
+    """Add up the price of every lunch, in cents."""
+    return sum(line["price_cents"] for line in lines)
+
+
+def find_confirmed_order(camper, token):
+    """Return this camper's order that was saved with this confirmation code, if any."""
+    if not token:
+        return None
+    return db.session.scalar(
+        db.select(Order).filter_by(camper_id=camper.id, confirmation_token=token)
+    )
+
+
+def already_ordered_days(camper, days):
+    """Return which of these camp days already have a confirmed lunch for this camper."""
+    taken = set(db.session.scalars(
+        db.select(DailyLunch.camp_day).where(
+            DailyLunch.camper_id == camper.id, DailyLunch.camp_day.in_(days)
+        )
+    ))
+    return [day for day in days if day in taken]
+
+
+def save_confirmed_order(camper, order, token):
+    """Save the order and its daily lunches in the database.
+
+    Returns (saved_order, conflict_days):
+      - (order, [])   the order was saved, or had already been saved
+      - (None, days)  nothing was saved because the camper already has a
+                      confirmed lunch on these days
+      - (None, [])    nothing was saved for another reason
+
+    If an order with this confirmation code was already saved (for example,
+    "Confirm Order" was clicked twice), that order is returned instead of
+    saving a second copy. The database also refuses a duplicate order code
+    and a second lunch for the same camper on the same day, so even two
+    requests arriving at the same moment can't get around these rules.
+    """
+    existing = find_confirmed_order(camper, token)
+    if existing is not None:
+        return existing, []
+
+    conflicts = already_ordered_days(camper, order["days"])
+    if conflicts:
+        return None, conflicts
+
+    lines = order_lines(order)
+    new_order = Order(
+        camper=camper,
+        package_id=order["package"]["id"],
+        total_cents=calculate_total_cents(lines),
+        status="confirmed",
+        confirmation_token=token,
+        daily_lunches=[
+            DailyLunch(
+                camper_id=camper.id,
+                camp_day=day,
+                meal_id=order["meals"][day]["meal_id"],
+                price_cents=line["price_cents"],
+                status="ordered",
+            )
+            for day, line in zip(order["days"], lines)
+        ],
+    )
+    db.session.add(new_order)
+    try:
+        # The order and all its lunches are saved together, or not at all.
+        db.session.commit()
+    except IntegrityError:
+        # Another request got there first. Nothing from this request was saved.
+        db.session.rollback()
+        existing = find_confirmed_order(camper, token)
+        if existing is not None:
+            # It was this same order (a double click), so use that one.
+            return existing, []
+        # Otherwise another order took one of these days.
+        return None, already_ordered_days(camper, order["days"])
+    return new_order, []
+
+
+# ---------- Editing the order from the review page ----------
+#
+# session["return_to_review"] is True while the parent is changing the order
+# after leaving the review page with "Change package or days" or "Change meals".
+# The package and meal pages then show an "Editing your order" bar with a
+# "Return to Review" button. Opening the review page again ends it.
+
+
+def remember_return_to_review():
+    """Note that the parent came from the review page (its links add ?return_to=review)."""
+    if request.method == "GET" and request.args.get("return_to") == "review":
+        session["return_to_review"] = True
+
+
+def end_return_to_review():
+    session.pop("return_to_review", None)
+
+
+def review_bar(camper, page):
+    """Return what the "Editing your order" bar needs, or None if it shouldn't show.
+
+    page is "package" or "meals".
+      missing_days - saved days that still need a meal. The review page
+                     won't open until they have one, so the bar says so.
+      saved_state  - what is saved right now, written the same way edit-bar.js
+                     describes the page (e.g. "package=6-day&days=Day 2"), so it
+                     can tell whether there are unsaved changes.
+    """
+    if session.get("return_to_review") is not True:
+        return None
+    order, _ = load_order(camper)
+    if order is None:
+        return None
+
+    if page == "package":
+        parts = [f"package={order['package']['id']}"] + [f"days={day}" for day in order["days"]]
+    else:
+        parts = [
+            f"{meal_field_name(day)}={order['meals'][day]['meal_id']}"
+            for day in order["days"]
+            if day in order["meals"]
+        ]
+
+    missing = days_missing_meals(order)
+    return {"missing_days": missing, "missing_text": join_days(missing), "saved_state": "&".join(parts)}
+
+
+def lines_from_saved_order(saved_order):
+    """List a confirmed order's lunches (from the database) for display."""
+    return [
+        {
+            "day": lunch.camp_day,
+            "meal_name": (find_meal(lunch.meal_id) or {"name": lunch.meal_id})["name"],
+            "price_cents": lunch.price_cents,
+        }
+        for lunch in saved_order.daily_lunches
+    ]
+
+
 # ---------- Pages ----------
 
 @bp.route("/register", methods=["GET", "POST"])
@@ -446,6 +611,8 @@ def register():
                     session["camper_id"] = camper.id
                     # A new camper starts with a fresh order.
                     session.pop("order", None)
+                    session.pop("last_order_id", None)
+                    session.pop("return_to_review", None)
                     flash(f"Thanks! {camper.full_name} is registered. Next, choose a lunch package.", "registered")
                 else:
                     # The package, days, and meals in the order are kept as they are.
@@ -482,6 +649,7 @@ def register():
 @registration_required
 def index(camper):
     """Choose a lunch package and camp days."""
+    remember_return_to_review()
     selected_package_id = None
     selected_days = []
     error = None
@@ -540,6 +708,7 @@ def index(camper):
         selected_days=selected_days,
         error=error,
         notice=notice,
+        review_bar=review_bar(camper, "package"),
     )
 
 
@@ -547,6 +716,7 @@ def index(camper):
 @registration_required
 def meals(camper):
     """Choose one meal for each selected camp day."""
+    remember_return_to_review()
     order, order_error = load_order(camper)
     if order is None:
         # No valid package and days yet, so send the parent back to the package page.
@@ -577,6 +747,9 @@ def meals(camper):
         if error is None:
             # Everything is valid. Look up each meal's price on the server and save.
             save_order(camper, package, days, meals_from_choices(submitted, days))
+            if action == "save-review":
+                # "Save and Return to Review" from the "Editing your order" bar.
+                return redirect(url_for("main.review"))
             day_count = len(days)
             flash(
                 f"Meal choices saved for all {day_count} camp "
@@ -590,7 +763,8 @@ def meals(camper):
         # choices still selected and the error message near the save button.
         choices = submitted
 
-    # Messages sent from a redirect (package confirmed, or meals saved).
+    # Messages sent from a redirect (package confirmed, meals saved, or the
+    # review page saying some days still need a meal).
     package_message = None
     success = None
     for category, message in get_flashed_messages(with_categories=True):
@@ -598,6 +772,12 @@ def meals(camper):
             package_message = message
         elif category == "meals-saved":
             success = message
+        elif category == "error":
+            error = message
+            problem_days = days_missing_meals(order)
+
+    # Show "Review Order" once every day has a saved meal (and nothing is wrong).
+    ready_for_review = error is None and not days_missing_meals(order)
 
     day_rows = [
         {
@@ -620,6 +800,121 @@ def meals(camper):
         package_message=package_message,
         error=error,
         success=success,
+        ready_for_review=ready_for_review,
+        review_bar=review_bar(camper, "meals"),
+    )
+
+
+@bp.route("/review", methods=["GET", "POST"])
+@registration_required
+def review(camper):
+    """Review the whole order and its total, then confirm it."""
+    # A POST means "Confirm Order" was pressed. If an order was already saved
+    # with this confirmation code (a second click, or the browser sending the
+    # form again), just show that order instead of saving another one.
+    token = request.form.get("confirmation_token", "") if request.method == "POST" else ""
+    already_saved = find_confirmed_order(camper, token)
+    if already_saved is not None:
+        session.pop("order", None)
+        end_return_to_review()
+        session["last_order_id"] = already_saved.id
+        return redirect(url_for("main.order_confirmed"))
+
+    order, order_error = load_order(camper)
+    if order is None:
+        flash(order_error, "error")
+        return redirect(url_for("main.index"))
+
+    missing = days_missing_meals(order)
+    if missing:
+        flash(f"Please choose a meal for {join_days(missing)} before reviewing your order.", "error")
+        return redirect(url_for("main.meals"))
+
+    saved = get_saved_order(camper)
+    expected_token = saved.get("confirmation_token")
+
+    if request.method == "POST":
+        # The code in the form must match the order in the session. If it
+        # doesn't, the order changed (for example, in another tab) after this
+        # review page was opened, so show the latest version instead.
+        if not isinstance(expected_token, str) or token != expected_token:
+            flash("Your order changed since this page was opened. Please review it again.", "error")
+            return redirect(url_for("main.review"))
+
+        try:
+            confirmed, conflict_days = save_confirmed_order(camper, order, token)
+        except SQLAlchemyError:
+            db.session.rollback()
+            confirmed, conflict_days = None, []
+        if conflict_days:
+            # Nothing was saved. The review page shows which days are taken.
+            return redirect(url_for("main.review"))
+        if confirmed is None:
+            flash("We couldn't save your order right now. Please try again.", "error")
+            return redirect(url_for("main.review"))
+
+        # The order is in the database now, so the in-progress copy is done.
+        session.pop("order", None)
+        end_return_to_review()
+        session["last_order_id"] = confirmed.id
+        return redirect(url_for("main.order_confirmed"))
+
+    # Give this version of the order a new confirmation code. (save_order()
+    # starts a fresh order without one whenever the package, days, or meals change.)
+    if not isinstance(expected_token, str):
+        saved["confirmation_token"] = secrets.token_urlsafe(32)
+        session.modified = True  # tells Flask the session changed inside the dict
+
+    # The parent is back on the review page, so any editing trip is over.
+    end_return_to_review()
+
+    errors = get_flashed_messages(category_filter=["error"])
+    lines = order_lines(order)
+
+    # A camper can only have one lunch per camp day, so point out any day
+    # that is already in one of this camper's confirmed orders.
+    conflict_days = already_ordered_days(camper, order["days"])
+    for line in lines:
+        line["conflict"] = line["day"] in conflict_days
+    conflict_message = None
+    if conflict_days:
+        conflict_message = (
+            f"{camper.full_name} already has a confirmed lunch on {join_days(conflict_days)}. "
+            f"Each camper can have only one lunch per day, so please choose different camp days."
+        )
+
+    return render_template(
+        "review.html",
+        camper=camper,
+        package=order["package"],
+        lines=lines,
+        total_cents=calculate_total_cents(lines),
+        confirmation_token=saved["confirmation_token"],
+        error=errors[-1] if errors else None,
+        conflict_message=conflict_message,
+    )
+
+
+@bp.route("/order-confirmed")
+@registration_required
+def order_confirmed(camper):
+    """Show the order that was just confirmed, read back from the database."""
+    order_id = session.get("last_order_id")
+    saved_order = None
+    if isinstance(order_id, int) and not isinstance(order_id, bool):
+        saved_order = db.session.get(Order, order_id)
+    # Only show an order that belongs to this browser's camper.
+    if saved_order is None or saved_order.camper_id != camper.id:
+        return redirect(url_for("main.index"))
+
+    lines = lines_from_saved_order(saved_order)
+    return render_template(
+        "confirmation.html",
+        camper=camper,
+        saved_order=saved_order,
+        package=find_package(saved_order.package_id),
+        lines=lines,
+        total_cents=saved_order.total_cents,
     )
 
 

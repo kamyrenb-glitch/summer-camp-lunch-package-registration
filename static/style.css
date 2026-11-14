@@ -32,6 +32,12 @@
   box-sizing: border-box;
 }
 
+/* Make sure the hidden attribute always hides, even on elements whose
+   class sets "display" (like .button) */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -523,6 +529,189 @@ fieldset {
   color: var(--navy);
 }
 
+/* ---------- "Editing your order" bar (package and meal pages) ---------- */
+
+/* position: sticky keeps the bar at the top of the screen while scrolling */
+.edit-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: var(--navy);
+  color: var(--white);
+  border-radius: 0 0 var(--radius) var(--radius);
+  box-shadow: 0 4px 12px rgba(11, 37, 69, 0.25);
+}
+
+.edit-bar-text {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.edit-bar-text strong {
+  display: block;
+}
+
+.edit-bar-warning {
+  color: #ffd27a; /* light amber, readable on navy */
+  font-weight: 600;
+}
+
+/* A white button so it stands out on the navy bar */
+.edit-bar-button {
+  background: var(--white);
+  color: var(--navy);
+  padding: 8px 18px;
+}
+
+.edit-bar-button:hover {
+  background: var(--ice);
+}
+
+.edit-bar-button:focus-visible {
+  outline-color: var(--white);
+}
+
+/* When the bar is on the page, scrolling to a field (for example with the
+   Tab key) leaves room for it, so the focused field isn't hidden under it. */
+html:has(.edit-bar) {
+  scroll-padding-top: 110px;
+}
+
+/* ---------- "Unsaved changes" dialog ---------- */
+
+.unsaved-dialog {
+  width: min(480px, calc(100% - 32px));
+  padding: 24px;
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(11, 37, 69, 0.35);
+  color: var(--text);
+}
+
+.unsaved-dialog::backdrop {
+  background: rgba(11, 37, 69, 0.55);
+}
+
+.unsaved-dialog h2 {
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 1.25rem;
+}
+
+.unsaved-dialog p {
+  margin: 0 0 20px;
+}
+
+.dialog-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog-buttons .button {
+  width: 100%;
+}
+
+/* "Discard Changes and Return": an outlined red button, since it loses changes */
+.button-discard {
+  background: var(--white);
+  color: var(--red);
+  border: 2px solid var(--red);
+  padding: 10px 26px;
+}
+
+.button-discard:hover {
+  background: var(--red-light);
+}
+
+/* ---------- Review and confirmation pages ---------- */
+
+.review-hint {
+  margin-top: 6px;
+}
+
+.order-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.order-table th,
+.order-table td {
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--ice-mid);
+  text-align: left;
+  vertical-align: top;
+}
+
+.order-table thead th {
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--ice-mid);
+}
+
+.order-table tbody th {
+  font-weight: 700;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.order-table .order-price {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The total row stands out: navy line above, larger bold text */
+.order-total th,
+.order-total td {
+  border-top: 2px solid var(--navy);
+  border-bottom: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+/* A day the camper already has a lunch for */
+.order-conflict th,
+.order-conflict td {
+  background: var(--red-light);
+}
+
+.conflict-tag {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.alert-link {
+  color: inherit;
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.edit-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 16px;
+}
+
+.button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 /* ---------- Meal page ---------- */
 
 .summary-days {
@@ -638,6 +827,26 @@ fieldset {
 
   .field-row {
     grid-template-columns: 1fr;
+  }
+
+  /* Keep the bar short on phones: small button beside the text */
+  .edit-bar {
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+  }
+
+  .edit-bar .edit-bar-button {
+    width: auto;
+    flex-shrink: 0;
+    padding: 8px 12px;
+  }
+
+  .edit-bar-text {
+    font-size: 0.85rem;
+  }
+
+  .edit-bar-hint {
+    display: none;
   }
 
   .button {

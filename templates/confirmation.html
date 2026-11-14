@@ -1,0 +1,54 @@
+{#
+  Shown after the order is confirmed (Issue #4).
+  Everything on this page is read back from the database, so it shows exactly
+  what was saved.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmed | Tucker Road Ice Rink Summer Camp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <!-- Lets keyboard users jump straight past the header -->
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      <p class="eyebrow">Tucker Road Ice Rink</p>
+      <h1>Summer Camp Lunch Registration</h1>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <div class="alert alert-success" role="status">
+      Your order is confirmed. Order number {{ saved_order.id }}.
+    </div>
+
+    {% include "_camper_bar.html" %}
+
+    <section class="card" aria-labelledby="confirmed-heading">
+      <h2 id="confirmed-heading">Order {{ saved_order.id }}</h2>
+      <p class="package-summary">
+        {{ package.name if package else saved_order.package_id }} — {{ lines|length }} {{ "lunch" if lines|length == 1 else "lunches" }}
+      </p>
+
+      {% include "_order_table.html" %}
+    </section>
+
+    <div class="button-row">
+      <!-- The confirmed order is saved, so this starts a new, empty order. -->
+      <a class="button button-secondary" href="{{ url_for('main.index') }}">Start Another Order</a>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    </div>
+  </footer>
+</body>
+</html>
