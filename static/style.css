@@ -712,6 +712,167 @@ html:has(.edit-bar) {
   cursor: wait;
 }
 
+/* ---------- Order status page (Issue #5) ---------- */
+
+.camper-bar-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+
+.status-heading-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.status-heading-row h2 {
+  margin-bottom: 0;
+}
+
+.refresh-button {
+  padding: 8px 18px;
+}
+
+.status-hint {
+  margin-top: 8px;
+}
+
+/* Four tiles: ordered, completed, remaining, unavailable */
+.status-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 0 0 16px;
+}
+
+.status-count {
+  padding: 14px 12px;
+  border: 2px solid var(--ice-mid);
+  border-radius: var(--radius);
+  background: var(--ice);
+  text-align: center;
+}
+
+.status-count dt {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.status-count dd {
+  margin: 4px 0 0;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--navy);
+}
+
+.status-count-completed {
+  border-color: var(--green);
+  background: var(--green-light);
+}
+
+.status-count-completed dd {
+  color: var(--green);
+}
+
+.status-count-remaining {
+  border-color: var(--focus-blue);
+  background: var(--white);
+}
+
+/* Red when some lunches couldn't be made; plain gray when there are none */
+.status-count-unavailable {
+  border-color: var(--red);
+  background: var(--red-light);
+}
+
+.status-count-unavailable dd {
+  color: var(--red);
+}
+
+.status-count-unavailable.status-count-none {
+  border-color: var(--ice-mid);
+  background: var(--white);
+}
+
+.status-count-unavailable.status-count-none dd {
+  color: var(--text-muted);
+}
+
+.progress-label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.lunch-progress {
+  width: 100%;
+  height: 14px;
+  accent-color: var(--green);
+}
+
+.order-counts {
+  margin: -8px 0 8px;
+  color: var(--text-muted);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Status words in a colored pill. The word itself carries the meaning. */
+.status-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-ordered {
+  background: var(--ice);
+  border-color: var(--ice-dark);
+  color: var(--navy);
+}
+
+/* Ordered: ice blue. Preparing: amber. Completed: green. Unavailable: red. */
+.status-preparing {
+  background: var(--amber-light);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.status-completed {
+  background: var(--green-light);
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.status-unavailable {
+  background: var(--red-light);
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.status-other {
+  background: var(--white);
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.empty-status {
+  margin: 0;
+  font-weight: 600;
+  color: var(--navy);
+}
+
 /* ---------- Meal page ---------- */
 
 .summary-days {
@@ -847,6 +1008,35 @@ html:has(.edit-bar) {
 
   .edit-bar-hint {
     display: none;
+  }
+
+  /* Status page: the four tiles become two rows of two, and the table
+     text gets a little smaller so its three columns fit */
+  .status-summary {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .status-count {
+    padding: 10px 6px;
+  }
+
+  .status-count dt {
+    font-size: 0.8rem;
+  }
+
+  .status-count dd {
+    font-size: 1.6rem;
+  }
+
+  .status-table th,
+  .status-table td {
+    padding: 10px 4px;
+    font-size: 0.9rem;
+  }
+
+  .status-heading-row .refresh-button {
+    width: auto;
   }
 
   .button {
