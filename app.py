@@ -4,12 +4,15 @@ Issue #1: Register a Camper
 Issue #2: Select a Lunch Package
 Issue #3: Choose Daily Meals
 Issue #4: Review Order and Total
+Issue #5: Track Lunch Orders
 
 Page 1 ("/register") saves the camper and the parent or guardian's contact
 information in the database. Page 2 ("/") lets the parent pick one lunch
 package and the camp days they need. Page 3 ("/meals") lets them pick one
 meal for each of those days. Page 4 ("/review") shows the whole order and
-its total, and confirming it saves the order in the database.
+its total, and confirming it saves the order in the database. The status
+page ("/order-status") shows how many lunches are ordered, completed, and
+remaining, and the status of each one.
 
 The browser (static/register.js, static/script.js, and static/meals.js) checks
 choices as the parent types and clicks, and this file checks everything again
@@ -37,6 +40,7 @@ from flask import (
     Flask,
     flash,
     get_flashed_messages,
+    make_response,
     redirect,
     render_template,
     request,
@@ -916,6 +920,129 @@ def order_confirmed(camper):
         lines=lines,
         total_cents=saved_order.total_cents,
     )
+
+
+# ---------- Tracking lunches (Issue #5) ----------
+
+# The four daily lunch statuses and the words parents see. A new lunch is
+# "ordered"; the café changes it in Issue #6. Issue #6 must save exactly
+# these values.
+LUNCH_STATUS_LABELS = {
+    "ordered": "Ordered",
+    "preparing": "Preparing",
+    "completed": "Completed",
+    "unavailable": "Unavailable",
+}
+
+# Older names for two statuses, from before the names above were chosen.
+# If any are still in the database, they are shown as the new status.
+OLD_STATUS_NAMES = {
+    "cooking": "preparing",
+    "cannot_complete": "unavailable",
+}
+
+
+def canonical_status(status):
+    """Return the current name for a status, e.g. "cooking" -> "preparing"."""
+    return OLD_STATUS_NAMES.get(status, status)
+
+
+def lunch_status_label(status):
+    """Turn a database status into the words parents see, e.g. "preparing" -> "Preparing".
+
+    A status that isn't one of the four is still shown, with its words
+    capitalized (for example "on_hold" -> "On Hold").
+    """
+    status = canonical_status(status)
+    if status in LUNCH_STATUS_LABELS:
+        return LUNCH_STATUS_LABELS[status]
+    return status.replace("_", " ").title()
+
+
+def lunch_status_class(status):
+    """CSS class for a status badge, e.g. "status-unavailable"."""
+    status = canonical_status(status)
+    if status in LUNCH_STATUS_LABELS:
+        return "status-" + status
+    return "status-other"
+
+
+def count_lunches(lunches):
+    """Count lunches ordered, completed, remaining, and unavailable.
+
+    - ordered:     every saved lunch
+    - completed:   status "completed"
+    - unavailable: status "unavailable" (the café couldn't make it)
+    - remaining:   everything else, which is still to be made
+                   ("ordered", "preparing", or any other status)
+
+    So ordered = completed + remaining + unavailable.
+    """
+    statuses = [canonical_status(lunch.status) for lunch in lunches]
+    ordered = len(statuses)
+    completed = statuses.count("completed")
+    unavailable = statuses.count("unavailable")
+    return {
+        "ordered": ordered,
+        "completed": completed,
+        "unavailable": unavailable,
+        "remaining": ordered - completed - unavailable,
+        # Lunches that can still be made or were made, for the progress bar.
+        "available": ordered - unavailable,
+    }
+
+
+def camp_day_position(day):
+    """Sort key so "Day 2" comes before "Day 10"."""
+    return CAMP_DAYS.index(day) if day in CAMP_DAYS else len(CAMP_DAYS)
+
+
+@bp.route("/order-status")
+@registration_required
+def order_status(camper):
+    """Show every confirmed order for this camper and the status of each lunch.
+
+    The orders are found only from the camper in this browser's session, never
+    from an order number in the URL, so a parent can't open another camper's
+    orders. Everything is read from the database each time the page opens, so
+    updates from the café appear when the parent refreshes.
+    """
+    saved_orders = db.session.scalars(
+        db.select(Order).where(Order.camper_id == camper.id).order_by(Order.id)
+    ).all()
+
+    orders = []
+    all_lunches = []
+    for saved_order in saved_orders:
+        lunches = sorted(saved_order.daily_lunches, key=lambda lunch: camp_day_position(lunch.camp_day))
+        all_lunches.extend(lunches)
+        package = find_package(saved_order.package_id)
+        orders.append({
+            "id": saved_order.id,
+            "package_name": package["name"] if package else saved_order.package_id,
+            "counts": count_lunches(lunches),
+            "rows": [
+                {
+                    "day": lunch.camp_day,
+                    "meal_name": (find_meal(lunch.meal_id) or {"name": lunch.meal_id})["name"],
+                    "status_label": lunch_status_label(lunch.status),
+                    "status_class": lunch_status_class(lunch.status),
+                }
+                for lunch in lunches
+            ],
+        })
+
+    response = make_response(render_template(
+        "status.html",
+        camper=camper,
+        orders=orders,
+        counts=count_lunches(all_lunches),
+        on_status_page=True,
+    ))
+    # Ask the browser not to keep a copy, so Back/Refresh always shows the
+    # latest statuses from the database.
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 # This lets you start the app with "python app.py".

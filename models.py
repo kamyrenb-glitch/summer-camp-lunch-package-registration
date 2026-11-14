@@ -128,7 +128,13 @@ class DailyLunch(db.Model):
     # The price when the order was placed, so later menu price changes
     # don't change orders that were already confirmed.
     price_cents: Mapped[int] = mapped_column(Integer)
-    # "ordered" for now. The café will mark lunches "completed" (Issue #6).
+    # One of four values:
+    #   "ordered"     - saved, not started yet (every new lunch starts here)
+    #   "preparing"   - the café is making it
+    #   "completed"   - the camper received it
+    #   "unavailable" - the café couldn't make it
+    # The café changes it in Issue #6. app.py turns these into the words
+    # parents see (LUNCH_STATUS_LABELS).
     status: Mapped[str] = mapped_column(String(20), default="ordered")
 
     order: Mapped[Order] = relationship(back_populates="daily_lunches")

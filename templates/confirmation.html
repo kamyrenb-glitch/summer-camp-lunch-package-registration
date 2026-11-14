@@ -40,6 +40,8 @@
     </section>
 
     <div class="button-row">
+      <!-- See how many lunches are ordered, completed, and remaining -->
+      <a class="button" href="{{ url_for('main.order_status') }}">View Order Status</a>
       <!-- The confirmed order is saved, so this starts a new, empty order. -->
       <a class="button button-secondary" href="{{ url_for('main.index') }}">Start Another Order</a>
     </div>
