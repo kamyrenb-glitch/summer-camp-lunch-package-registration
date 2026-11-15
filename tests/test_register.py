@@ -276,7 +276,8 @@ class RegistrationTestCase(AppTestCase):
         # meals.js sends this when "Edit camper & contact information" is clicked.
         response = self.client.post("/meals", data={"meal-day-1": "cheese-pizza", "action": "edit-camper"})
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/register"))
+        # The edit page will come back to the meal page afterwards.
+        self.assertTrue(response.headers["Location"].endswith("/register?next=meals"))
         self.assertEqual(self.saved_order()["meals"], {"Day 1": {"meal_id": "cheese-pizza", "price_cents": 1100}})
 
     # ----- Not trusting the browser -----

@@ -1,0 +1,53 @@
+{#
+  Error page for "Page not found" (404) and "can't be opened that way" (405).
+  It shows the same message whatever was asked for, so it never reveals
+  whether another camper's lunch or order exists. app.py (error_page) picks
+  one safe way to continue: the café's daily orders, the parent's order
+  status, or lunch registration.
+  This is a Jinja comment, so it never gets sent to the browser.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ heading }} | Tucker Road Ice Rink Summer Camp</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container">
+      {% if in_cafe %}
+        <p class="eyebrow">Tucker Road Ice Rink · Café</p>
+        <h1>Daily Lunch Orders</h1>
+      {% else %}
+        <p class="eyebrow">Tucker Road Ice Rink</p>
+        <h1>Summer Camp Lunch Registration</h1>
+      {% endif %}
+    </div>
+  </header>
+
+  <main id="main" class="container">
+    <section class="card error-card" aria-labelledby="error-heading">
+      <h2 id="error-heading">{{ heading }}</h2>
+      <p>{{ message }}</p>
+      <div class="button-row">
+        <a class="button" href="{{ action.href }}">{{ action.label }}</a>
+      </div>
+    </section>
+  </main>
+
+  {% if in_cafe %}
+    <!-- Café pages don't show the café staff link -->
+    <footer class="site-footer">
+      <div class="container">
+        <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+      </div>
+    </footer>
+  {% else %}
+    {% include "_site_footer.html" %}
+  {% endif %}
+</body>
+</html>

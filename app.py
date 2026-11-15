@@ -180,6 +180,9 @@ def create_app(test_config=None):
     app.register_blueprint(bp)
     app.cli.add_command(init_db_command)
     app.add_template_filter(format_price, "price")
+    app.context_processor(navigation_context)
+    app.register_error_handler(404, page_not_found)
+    app.register_error_handler(405, method_not_allowed)
 
     # For the local SQLite file only, create missing tables automatically so
     # the app works right away. A deployed database is set up once with
@@ -300,6 +303,64 @@ def registration_required(view):
         return view(camper, *args, **kwargs)
 
     return wrapped
+
+
+# ---------- Returning after "Edit camper & contact information" ----------
+#
+# The edit link adds ?next=<name> (for example ?next=status) so that Save
+# Changes and Cancel go back to the page the parent came from. Only the names
+# below are accepted. Anything else, including a full web address, is ignored
+# and the parent goes to the package page as before.
+
+EDIT_RETURN_PAGES = {
+    "package": "main.index",
+    "meals": "main.meals",
+    "review": "main.review",
+    "confirmation": "main.order_confirmed",
+    "status": "main.order_status",
+}
+
+# The return name each parent page puts on its edit link. The change-meal page
+# needs a lunch number, so it returns to the status page instead.
+EDIT_RETURN_BY_PAGE = {
+    "main.index": "package",
+    "main.meals": "meals",
+    "main.review": "review",
+    "main.order_confirmed": "confirmation",
+    "main.order_status": "status",
+    "main.change_meal": "status",
+}
+
+
+def edit_return_name(value):
+    """Return value if it's one of the allowed return names, otherwise None."""
+    return value if value in EDIT_RETURN_PAGES else None
+
+
+def edit_return_url(name):
+    """The page to go to after editing; the package page if name isn't allowed."""
+    return url_for(EDIT_RETURN_PAGES.get(name, "main.index"))
+
+
+def take_camper_updated_message():
+    """The "information updated" message waiting to be shown, or None.
+
+    The camper bar calls this, so the message appears on whichever page the
+    parent returns to after editing.
+    """
+    messages = get_flashed_messages(category_filter=["camper-updated"])
+    return messages[-1] if messages else None
+
+
+def navigation_context():
+    """Values every template can use (Flask adds these automatically)."""
+    return {
+        # Footer: "Café daily orders" instead of "Café staff sign in" once signed in.
+        "cafe_signed_in": cafe_signed_in(),
+        # Camper bar: which page the edit link should come back to.
+        "edit_return": EDIT_RETURN_BY_PAGE.get(request.endpoint),
+        "camper_updated_message": take_camper_updated_message,
+    }
 
 
 # ---------- The in-progress order (stored in the session) ----------
@@ -598,6 +659,10 @@ def register():
     camper = get_current_camper()
     errors = {}
     summary = None
+    # Where Save Changes and Cancel go when editing (see EDIT_RETURN_PAGES).
+    # It comes from the link (?next=) or the form's hidden field, and is only
+    # used if it's one of the allowed names.
+    return_name = edit_return_name(request.values.get("next")) if camper is not None else None
 
     if request.method == "POST":
         values, errors = validate_registration(request.form)
@@ -634,10 +699,11 @@ def register():
                     session.pop("last_order_id", None)
                     session.pop("return_to_review", None)
                     flash(f"Thanks! {camper.full_name} is registered. Next, choose a lunch package.", "registered")
-                else:
-                    # The package, days, and meals in the order are kept as they are.
-                    flash("Camper and contact information updated.", "registered")
-                return redirect(url_for("main.index"))
+                    return redirect(url_for("main.index"))
+                # Editing: the package, days, and meals in the order are kept
+                # as they are. Go back to the page the parent came from.
+                flash("Camper and contact information updated.", "camper-updated")
+                return redirect(edit_return_url(return_name))
         else:
             summary = error_summary(errors)
     elif camper is not None:
@@ -662,6 +728,8 @@ def register():
         summary=summary,
         max_lengths={name: max_length for name, _, max_length in FIELDS},
         info=infos[0] if infos else None,
+        return_name=return_name,
+        cancel_url=edit_return_url(return_name),
     )
 
 
@@ -761,7 +829,7 @@ def meals(camper):
             choices.update(submitted)
             save_order(camper, package, days, meals_from_choices(choices, days))
             if action == "edit-camper":
-                return redirect(url_for("main.register"))
+                return redirect(url_for("main.register", next="meals"))
             return redirect(url_for("main.index"))
 
         if error is None:
@@ -1469,6 +1537,54 @@ def cafe_update_status(lunch_id):
         "message": f"Updated: {camper.full_name}'s {day} lunch is now {lunch_status_label(new_status)}.",
     }
     return redirect(url_for("main.cafe_orders", day=day, _anchor=f"lunch-{lunch.id}"))
+
+
+# ---------- Error pages (404 and 405) ----------
+
+def error_page(status_code, heading, message):
+    """A page in the site's style with one safe way to continue.
+
+    It says the same thing whatever was asked for, so it never reveals whether
+    another camper's lunch or order exists.
+    """
+    in_cafe = request.path.startswith("/cafe")
+    if in_cafe and cafe_signed_in():
+        action = {"href": url_for("main.cafe_orders"), "label": "Back to Café Daily Orders"}
+    else:
+        try:
+            camper = get_current_camper()
+            has_orders = camper is not None and bool(camper.orders)
+        except SQLAlchemyError:
+            db.session.rollback()
+            has_orders = False
+        if has_orders:
+            action = {"href": url_for("main.order_status"), "label": "View Order Status"}
+        else:
+            action = {"href": url_for("main.index"), "label": "Return to Lunch Registration"}
+
+    return render_template(
+        "error.html",
+        heading=heading,
+        message=message,
+        action=action,
+        in_cafe=in_cafe,
+    ), status_code
+
+
+def page_not_found(error):
+    return error_page(
+        404,
+        "Page not found",
+        "We couldn't find that page. The link may be out of date or typed incorrectly.",
+    )
+
+
+def method_not_allowed(error):
+    return error_page(
+        405,
+        "This page can't be opened that way",
+        "This address can't be opened directly. Please use the buttons on the site instead.",
+    )
 
 
 # This lets you start the app with "python app.py".

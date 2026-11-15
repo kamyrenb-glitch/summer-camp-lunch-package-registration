@@ -64,6 +64,10 @@
     </div>
 
     <form id="register-form" method="post" action="{{ url_for('main.register') }}" novalidate>
+      {% if return_name %}
+        <!-- Which page to go back to after saving (checked against a fixed list on the server) -->
+        <input type="hidden" name="next" value="{{ return_name }}">
+      {% endif %}
       <section class="card" aria-labelledby="camper-heading">
         <h3 id="camper-heading">Camper information</h3>
         <div class="field-row">
@@ -96,17 +100,13 @@
         </button>
         {% if editing %}
           <!-- Leaves without saving. The package, days, and meals are kept. -->
-          <a class="button button-secondary" href="{{ url_for('main.index') }}">Cancel</a>
+          <a class="button button-secondary" href="{{ cancel_url }}">Cancel</a>
         {% endif %}
       </div>
     </form>
   </main>
 
-  <footer class="site-footer">
-    <div class="container">
-      <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
-    </div>
-  </footer>
+  {% include "_site_footer.html" %}
 
   <script src="{{ url_for('static', filename='register.js') }}"></script>
 </body>

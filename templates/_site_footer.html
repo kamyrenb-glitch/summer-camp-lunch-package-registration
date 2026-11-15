@@ -1,0 +1,18 @@
+{#
+  Footer for the parent pages, with a small link for café staff.
+  Used with {% include "_site_footer.html" %}. Café pages keep their own
+  footer without this link.
+  cafe_signed_in comes from navigation_context() in app.py.
+#}
+<footer class="site-footer">
+  <div class="container">
+    <p>Tucker Road Ice Rink &middot; Summer Camp Café</p>
+    <p class="footer-staff">
+      {% if cafe_signed_in %}
+        <a class="footer-link" href="{{ url_for('main.cafe_orders') }}">Café daily orders</a>
+      {% else %}
+        <a class="footer-link" href="{{ url_for('main.cafe_login') }}">Café staff sign in</a>
+      {% endif %}
+    </p>
+  </div>
+</footer>
