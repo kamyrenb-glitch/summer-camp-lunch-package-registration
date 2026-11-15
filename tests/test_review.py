@@ -142,7 +142,7 @@ class ReviewTestCase(AppTestCase):
         # Ways to go back and edit, and the confirm button.
         self.assertIn('href="/?return_to=review">Change package or days</a>', html)
         self.assertIn('href="/meals?return_to=review">Change meals</a>', html)
-        self.assertIn('href="/register"', html)
+        self.assertIn('href="/register?next=review"', html)
         self.assertIn(">Confirm Order</button>", html)
 
     def test_going_back_to_edit_keeps_the_order(self):

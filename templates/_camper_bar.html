@@ -6,7 +6,14 @@
   before leaving.
   Once the camper has a confirmed order, it also links to the order status
   page (except on that page itself, where on_status_page is set).
+  The edit link adds ?next=<page> (edit_return, from app.py) so Save Changes
+  and Cancel on the edit page come back here.
 #}
+{% set updated_message = camper_updated_message() %}
+{% if updated_message %}
+  <!-- Shown after editing the camper's information and coming back here -->
+  <div class="alert alert-success" role="status">{{ updated_message }}</div>
+{% endif %}
 <section class="camper-bar" aria-labelledby="camper-bar-label">
   <p class="camper-bar-name">
     <span id="camper-bar-label" class="camper-bar-label">Ordering for</span>
@@ -16,7 +23,7 @@
     {% if camper.orders and not on_status_page %}
       <a id="order-status-link" class="link-button" href="{{ url_for('main.order_status') }}">View order status</a>
     {% endif %}
-    <a id="edit-camper-link" class="link-button" href="{{ url_for('main.register') }}">
+    <a id="edit-camper-link" class="link-button" href="{{ url_for('main.register', next=edit_return) if edit_return else url_for('main.register') }}">
       Edit camper &amp; contact information
     </a>
   </div>

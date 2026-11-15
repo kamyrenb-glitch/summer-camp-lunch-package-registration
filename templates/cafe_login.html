@@ -25,6 +25,11 @@
   <main id="main" class="container">
     <section class="card cafe-login" aria-labelledby="cafe-login-heading">
       <h2 id="cafe-login-heading">Café sign in</h2>
+      <!-- For parents who opened this page by mistake (shown in every case) -->
+      <p class="cafe-login-return">
+        This page is for café staff.
+        <a href="{{ url_for('main.index') }}">Return to lunch registration</a>.
+      </p>
 
       {% if not passcode_set_up %}
         <!-- No CAFE_PASSCODE setting, so the café pages stay locked -->
